@@ -1,0 +1,263 @@
+function New-MountPsDriveObject {
+    param (
+        [Parameter(Mandatory)]
+        [string]$UNCPath,
+
+        [Parameter(Mandatory)]
+        [pscredential]$Credential,
+
+        [string]$DriveName = $null,
+        [switch]$AutoUnmount
+    )
+
+    $UNCPath = $UNCPath.TrimEnd('\')
+    $server  = ($UNCPath -replace '^\\\\([^\\]+)\\.*', '$1')
+    $share   = ($UNCPath -replace '^\\\\[^\\]+\\([^\\]+)\\?.*', '$1')
+    $drive   = if ($DriveName) { $DriveName } else { "$server-$share" }
+
+    $psDriveName = "$drive:"
+    $mounted = $false
+
+    # Check if drive exists
+    $existing = Get-PSDrive -Name $drive -ErrorAction SilentlyContinue
+    if ($existing -and ($existing.Root -eq $UNCPath)) {
+        Write-Verbose "Drive '$drive' already exists and matches path."
+        $mounted = $true
+    } else {
+        try {
+            New-PSDrive -Name $drive -PSProvider FileSystem -Root $UNCPath -Credential $Credential -Persist:$false -Scope Global -ErrorAction Stop | Out-Null
+            $mounted = $true
+        } catch {
+            throw "❌ Failed to mount drive '$drive' to '$UNCPath': $_"
+        }
+    }
+
+    if ($AutoUnmount) {
+        Register-EngineEvent PowerShell.Exiting -Action {
+            try {
+                Remove-PSDrive -Name $using:drive -Force -ErrorAction SilentlyContinue
+            } catch {}
+        } | Out-Null
+    }
+
+    return @{
+        DriveName   = $drive
+        UNCPath     = $UNCPath
+        Server      = $server
+        Share       = $share
+        Credential  = $Credential
+        Mounted     = $mounted
+        PSDriveName = $psDriveName
+        AutoUnmount = $AutoUnmount.IsPresent
+    }
+}
+
+function Get-PathFromMount {
+    param (
+        [Parameter(Mandatory)]
+        [hashtable]$DriveObject,
+
+        [string]$Path = ""
+    )
+
+    if ($Path -like "\\\\*") {
+        $relativePath = $Path.Substring($DriveObject.UNCPath.Length).TrimStart('\')
+    } else {
+        $relativePath = $Path
+    }
+
+    return Join-Path -Path $DriveObject.PSDriveName -ChildPath $relativePath
+}
+
+function Unmount-PsDriveObject {
+    param (
+        [Parameter(Mandatory)]
+        [hashtable]$DriveObject
+    )
+
+    if ($DriveObject.Mounted -and (Get-PSDrive -Name $DriveObject.DriveName -ErrorAction SilentlyContinue)) {
+        try {
+            Remove-PSDrive -Name $DriveObject.DriveName -Force -ErrorAction Stop
+            $DriveObject.Mounted = $false
+        } catch {
+            Write-Warning "⚠️ Failed to remove PSDrive '$($DriveObject.DriveName)': $_"
+        }
+    }
+}
+# function MountRemoteDrive {
+#     <#
+#     .SYNOPSIS
+#         Mounts a remote share to a local drive letter with automatic cleanup on PowerShell exit.
+
+#     .PARAMETER Share
+#         UNC path of the remote share (e.g. \\server\share).
+
+#     .PARAMETER DriveLetter
+#         Drive letter to assign (e.g. Z). Optional, will auto-select if not provided.
+
+#     .PARAMETER Credential
+#         Credentials used to authenticate against the remote share.
+
+#     .PARAMETER UseNetUse
+#         If set, the drive is mounted using 'net use' instead of New-PSDrive.
+
+#     .PARAMETER PSDriveOnly
+#         If set, the drive will only be visible to the current PowerShell session.
+
+#     .PARAMETER Persistent
+#         If set, the connection will be persistent across reboots (only relevant with -UseNetUse).
+
+#     .PARAMETER ReadOnly
+#         If set, the PSDrive is mounted as read-only (if supported).
+
+#     .PARAMETER RegisterExitCleanup
+#         If set, the drive will be unmounted automatically when PowerShell exits.
+
+#     .OUTPUTS
+#         Returns a hashtable with 'DriveName', 'Success' and optionally 'Error'.
+
+#     #>
+
+#     param (
+#         [Parameter(Mandatory)]
+#         [string] $Share,
+
+#         [Parameter()]
+#         [string] $DriveLetter,
+
+#         [Parameter(Mandatory)]
+#         [System.Management.Automation.PSCredential] $Credential,
+
+#         [switch] $UseNetUse,
+#         [switch] $PSDriveOnly,
+#         [switch] $Persistent,
+#         [switch] $ReadOnly,
+#         [switch] $RegisterExitCleanup
+#     )
+
+#     $result = @{
+#         Success   = $false
+#         DriveName = $null
+#         Error     = $null
+#     }
+
+#     try {
+#         # Assign default drive letter if not provided
+#         if (-not $DriveLetter) {
+#             $used = Get-PSDrive -PSProvider FileSystem | Select-Object -ExpandProperty Name
+#             $free = [char[]](67..90) | ForEach-Object { "$([char]$_)" } | Where-Object { $_ -notin $used }
+#             if ($free.Count -eq 0) {
+#                 throw "No available drive letters."
+#             }
+#             $DriveLetter = $free[0]
+#         }
+
+#         $driveName = "$DriveLetter`:"
+#         $result.DriveName = $driveName
+
+#         if ($UseNetUse) {
+#             $securePassword = $Credential.Password
+#             $plainPassword = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
+#                 [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword)
+#             )
+
+#             $netUseCommand = "net use $driveName `"$Share`" `"$($Credential.UserName)`" `"$plainPassword`""
+
+#             if ($Persistent) {
+#                 $netUseCommand += " /persistent:yes"
+#             } else {
+#                 $netUseCommand += " /persistent:no"
+#             }
+
+#             Invoke-Expression $netUseCommand | Out-Null
+
+#         } else {
+#             $psDriveParams = @{
+#                 Name       = $DriveLetter
+#                 PSProvider = 'FileSystem'
+#                 Root       = $Share
+#                 Credential = $Credential
+#             }
+
+#             if ($ReadOnly) {
+#                 $psDriveParams['Description'] = 'ReadOnly'
+#             }
+
+#             New-PSDrive @psDriveParams -Scope Global | Out-Null
+#         }
+
+#         if ($RegisterExitCleanup) {
+#             Register-EngineEvent -SourceIdentifier "PowerShell.Exiting" -Action {
+#                 try {
+#                     if ($UseNetUse) {
+#                         net use $driveName /delete /y | Out-Null
+#                     } else {
+#                         Remove-PSDrive -Name $DriveLetter -Force -ErrorAction SilentlyContinue
+#                     }
+#                 } catch {
+#                     Write-Debug "Cleanup failed: $_"
+#                 }
+#             } | Out-Null
+#         }
+
+#         $result.Success = $true
+#     } catch {
+#         $result.Error = $_.Exception.Message
+#     }
+
+#     return $result
+# }
+# function MountRemoteDrive {
+#     param (
+#         [string]$UNCPath,
+#         [pscredential]$Credential
+#     )
+
+#     if (-not $Credential) { return }
+
+#     if ($UNCPath -match "^\\\\(?<Server>[^\\]+)\\d\$(?<Rest>\\.*)$") {
+#         $serverName = $matches.Server
+#         $driveName = $serverName.ToUpper()
+
+#         # Prüfen, ob das Laufwerk schon existiert
+#         if (-not (Get-PSDrive -Name $driveName -ErrorAction SilentlyContinue)) {
+#             try {
+#                 New-PSDrive -Name $driveName -PSProvider FileSystem -Root "\\$serverName\d$" -Credential $Credential -Scope Global | Out-Null
+
+#                 # Automatisch entfernen beim PS-Exit
+#                 Register-EngineEvent PowerShell.Exiting -Action {
+#                     try {
+#                         Remove-PSDrive -Name $using:driveName -Force -ErrorAction SilentlyContinue
+#                     } catch { }
+#                 } | Out-Null
+#             } catch {
+#                 throw "❌ Failed to mount \\$serverName\d$ as $driveName`: - $_"
+#             }
+#         }
+#     } else {
+#         throw "❌ Invalid UNC path format: '$UNCPath'"
+#     }
+# }
+
+
+# function MountRemoteDrive([string]$server, [pscredential]$cred) {
+#     $remotePath = "\\$server\d$"
+#     $localPath = "temp:\$server"
+#     if (-not (Test-Path 'temp:\')) {
+#         New-PSDrive -Name "temp" -PSProvider FileSystem -Root "$env:TEMP" | Out-Null
+#     }
+
+#     if (-not (Test-Path $localPath)) {
+#         $mountPath = Join-Path $env:TEMP "$server"
+#         if (-not (Test-Path $mountPath)) {
+#             New-Item -Path $mountPath -ItemType Directory | Out-Null
+#         }
+
+#         try {
+#             New-PSDrive -Name "$server" -PSProvider FileSystem -Root $remotePath -Credential $cred -Scope Global -Persist:$false | Out-Null
+#         }
+#         catch {
+#             throw "❌ Failed to mount remote drive $remotePath to temp:\RemoteModules - $_"
+#         }
+#     }
+# }

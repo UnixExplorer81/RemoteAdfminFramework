@@ -1,0 +1,117 @@
+
+# Ah okay – danke für die Klarstellung! Du hast absolut recht:
+# Write-Host, Write-Output, Write-Error, Write-Warning, Write-Verbose, Write-Debug etc. landen standardmäßig nur im jeweiligen Stream – und nur Write-Output wird returned, der Rest nicht, wenn du ein ScriptBlock remote per Invoke-Command oder Invoke-Expression ausführst.
+
+# Aber: Ja, du kannst alle Output-Streams abfangen und als Teil des Ergebnisses zurückgeben – entweder einzeln oder gesammelt.
+
+# ✅ Lösung: Alles abfangen und als Objekt zurückgeben
+# Hier ist ein generischer Wrapper, der alle Outputs in einer Hashtable oder einem Objekt sammelt, den Code ausführt und am Ende alles zurückgibt:
+
+# powershell
+# Kopieren
+# Bearbeiten
+# function Invoke-ScriptBlockWithFullOutput {
+#     param (
+#         [ScriptBlock]$ScriptBlock
+#     )
+
+#     $output = @{
+#         Output  = @()
+#         Error   = @()
+#         Warning = @()
+#         Verbose = @()
+#         Debug   = @()
+#     }
+
+#     $outputStream = [System.IO.StringWriter]::new()
+
+#     # Temporäre Umleitung
+#     $psCmd = {
+#         $Output.Clear()
+#         $Error.Clear()
+
+#         $out = @()
+#         $warn = @()
+#         $err = @()
+#         $verb = @()
+#         $dbg = @()
+
+#         $out += & {
+#             try {
+#                 & $using:ScriptBlock 3>&1 2>&1 4>&1 5>&1
+#             } catch {
+#                 $err += $_
+#             }
+#         }
+
+#         foreach ($entry in $out) {
+#             if ($entry -is [System.Management.Automation.WarningRecord]) {
+#                 $warn += $entry
+#             } elseif ($entry -is [System.Management.Automation.ErrorRecord]) {
+#                 $err += $entry
+#             } elseif ($entry -is [System.Management.Automation.VerboseRecord]) {
+#                 $verb += $entry
+#             } elseif ($entry -is [System.Management.Automation.DebugRecord]) {
+#                 $dbg += $entry
+#             } else {
+#                 $outFinal += $entry
+#             }
+#         }
+
+#         @{
+#             Output  = $outFinal
+#             Warning = $warn
+#             Error   = $err
+#             Verbose = $verb
+#             Debug   = $dbg
+#         }
+#     }
+
+#     Invoke-Command -ScriptBlock $psCmd
+# }
+# 🧪 Beispielverwendung:
+# powershell
+# Kopieren
+# Bearbeiten
+# $result = Invoke-ScriptBlockWithFullOutput {
+#     Write-Output "Dies ist regulärer Output"
+#     Write-Warning "Warnung!"
+#     Write-Error "Fehler!"
+#     Write-Verbose "Das ist verbose Info" -Verbose
+#     Write-Debug "Debug info" -Debug
+#     return "Final return"
+# }
+
+# $result.Output   # regulärer Output und return
+# $result.Warning  # Warnungen
+# $result.Error    # Fehler
+# $result.Verbose  # Verbose
+# $result.Debug    # Debug
+# 🔥 Alternative (leichter): Tee-Object + Stream-Redirection
+# Wenn du’s einfacher willst und z. B. nur Write-Warning, Write-Error usw. brauchst, kannst du auch gezielt Streams umleiten:
+
+# powershell
+# Kopieren
+# Bearbeiten
+# $fullOutput = & {
+#     $Error.Clear()
+#     $WarningPreference = 'Continue'
+#     $VerbosePreference = 'Continue'
+#     $DebugPreference   = 'Continue'
+
+#     $output = & {
+#         Write-Host "IGNORED"
+#         Write-Output "Output"
+#         Write-Warning "Warnung"
+#         Write-Error "Fehler"
+#         Write-Verbose "Verbose" -Verbose
+#         Write-Debug "Debug" -Debug
+#         return "Fertig"
+#     } *>&1
+
+#     $output
+# }
+# Hier landen alle Streams (1–5) in $fullOutput (als gemischte Einträge, aber du kannst mit -is filtern).
+
+# 🧠 Fazit
+# Du kannst dir ein Invoke-RemoteWithStreams-Modul bauen, das deinen ScriptBlock umschließt und Output, Error, Warning, etc. als Objekt zurückgibt – ideal zur Analyse. 

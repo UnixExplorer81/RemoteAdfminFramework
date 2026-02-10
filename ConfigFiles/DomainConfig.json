@@ -1,0 +1,9 @@
+﻿{
+    "Domain": "topcall.inc",
+    "Controller": "DC=topcall,DC=inc",
+    "ProfileBaseDir":"\\\\TopCall.Inc\\Shares\\Roaming_Profiles$",
+    "AdminSecurityGroup":"Administrators",
+    "AdminGroupContainer":"Builtin",
+    "UserGroupContainer":"Groups",
+    "GroupFilter": ["Agents"]
+}
