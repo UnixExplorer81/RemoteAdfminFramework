@@ -22,10 +22,6 @@
         source = "{{REPOSITORY}}\Starter\RemoteAdminTools.ps1"
         target = "{{PROGRAMDATABASEDIR}}\RemoteAdminTools\RemoteAdminTools.ps1"
     }
-    RemoteAdminBootstrapping = @{
-        source = "{{REPOSITORY}}\Starter\RemoteAdminBootstrapping.ps1"
-        target = "{{PROGRAMDATABASEDIR}}\RemoteAdminTools\RemoteAdminBootstrapping.ps1"
-    }
 <#
     Configs
 #>
@@ -163,6 +159,10 @@
     PlaceholderResolver = @{
         source = "{{REPOSITORY}}\Modules\PlaceholderResolver\PlaceholderResolver.psm1"
         target = "{{MODULESBASE}}\PlaceholderResolver\PlaceholderResolver.psm1"
+    }
+    ProgressBar = @{
+        source = "{{REPOSITORY}}\Modules\ProgressBar\ProgressBar.psm1"
+        target = "{{MODULESBASE}}\ProgressBar\ProgressBar.psm1"
     }
     ProxyPlaceholderResolver = @{
         source = "{{REPOSITORY}}\Modules\ProxyPlaceholderResolver\ProxyPlaceholderResolver.psm1"

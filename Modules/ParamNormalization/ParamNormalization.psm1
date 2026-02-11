@@ -34,15 +34,12 @@
             )
         )
 
-    }
-    elseif ($task.Script -is [string]) {
+    } elseif ($task.Script -is [string]) {
         Write-Debug "⚠ Task '$($task.Name)' uses string-based Script"
         $scriptBlock = [scriptblock]::Create($task.Script)
-    }
-    elseif ($task.Script -is [scriptblock]) {
+    } elseif ($task.Script -is [scriptblock]) {
         $scriptBlock = $task.Script
-    }
-    else {
+    } else {
         throw "❌ Task '$($task.Name)' has unexpected Script type: $($task.Script.GetType().FullName)"
     }
 

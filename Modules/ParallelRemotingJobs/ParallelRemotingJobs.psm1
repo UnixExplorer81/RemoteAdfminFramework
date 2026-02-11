@@ -20,8 +20,10 @@ function ParallelRemotingJobs {
                 [pscredential]$Credential,
                 [object]$Context
             )
-            $session = New-PSSession -ComputerName $Computer.ip -Credential $Credential
-            if($session){
+            if($task.RemoteExecution) {
+                $session = New-PSSession -ComputerName $Computer.ip -Credential $Credential
+            }
+            if($session -or -not $task.RemoteExecution){
                 try {
                     $results = [System.Collections.ArrayList]::new()
                     foreach ($task in $Context.Tasks) {
@@ -37,8 +39,10 @@ function ParallelRemotingJobs {
                                 & $params.ScriptBlock $params.ArgumentList[0]
                             }
 
-                            if ($task.RenewSession -eq $true -and $session) {
-                                Remove-PSSession -Session $session
+                            if ($task.RenewSession -eq $true) {
+                                if($null -ne $session){
+                                    Remove-PSSession -Session $session
+                                }
                                 $session = New-PSSession -ComputerName $Computer.ip -Credential $Credential
                             }
 

@@ -84,7 +84,7 @@ AI-082;192.168.1.82;;CN=Domain Computers,CN=Users;DC=topcall,DC=inc;topcall.inc
 AI-083;192.168.1.83;;CN=Domain Computers,CN=Users;DC=topcall,DC=inc;topcall.inc
 AI-084;192.168.1.84;;CN=Domain Computers,CN=Users;DC=topcall,DC=inc;topcall.inc
 AI-085;192.168.1.85;;CN=Domain Computers,CN=Users;DC=topcall,DC=inc;topcall.inc
-AI-086;192.168.1.86;;CN=Domain Computers,CN=Users;DC=topcall,DC=inc;topcall.inc
+AI-086;192.168.1.86;B0-83-FE-6F-25-52;CN=Domain Computers,CN=Users;DC=topcall,DC=inc;topcall.inc
 AI-087;192.168.1.87;;CN=Domain Computers,CN=Users;DC=topcall,DC=inc;topcall.inc
 AI-088;192.168.1.88;;CN=Domain Computers,CN=Users;DC=topcall,DC=inc;topcall.inc
 AI-089;192.168.1.89;;CN=Domain Computers,CN=Users;DC=topcall,DC=inc;topcall.inc
@@ -131,3 +131,4 @@ AI-135;192.168.1.135;;CN=Domain Computers,CN=Users;DC=topcall,DC=inc;topcall.inc
 AI-136;192.168.1.136;;CN=Domain Computers,CN=Users;DC=topcall,DC=inc;topcall.inc
 AI-137;192.168.1.137;;CN=Domain Computers,CN=Users;DC=topcall,DC=inc;topcall.inc
 AI-138;192.168.1.138;;CN=Domain Computers,CN=Users;DC=topcall,DC=inc;topcall.inc
+DC-2;192.168.1.253;AC:22:0B:2A:CD:F2;CN=Domain Computers,CN=Users;DC=topcall,DC=inc;topcall.inc

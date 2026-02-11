@@ -1,46 +1,68 @@
 function WakeOnLan {
     param (
-        [Parameter(Mandatory)][string]$MacAddress,
-        [int]$Port = 7  # 7 | 9
+        [Parameter(Mandatory)]
+        [object]$Context
     )
-
-    $MacParts = $MacAddress -split "[:-]"
-    if ($MacParts.Count -ne 6) {
-        throw "Ungültige MAC-Adresse: Muss im Format XX:XX:XX:XX:XX:XX oder XX-XX-XX-XX-XX-XX sein."
+    if(-not $Context.Computer.mac){
+        return @{
+            Success = $false
+            Message = "MAC address missing for $($Context.Computer.hostname)"
+        }
     }
-    $MacByteArray = $MacParts | ForEach-Object { [Byte] "0x$_" }
-    [Byte[]] $MagicPacket = (,0xFF * 6) + ($MacByteArray * 16)
     try {
-        $UdpClient = New-Object System.Net.Sockets.UdpClient
-        $UdpClient.Connect(([System.Net.IPAddress]::Broadcast), $Port)
-        $UdpClient.Send($MagicPacket, $MagicPacket.Length) | Out-Null
-        Write-Output "Magic Packet an $MacAddress auf Port $Port gesendet."
+        $MagicPacket = buildMagicPackage -MacAddress $Context.Computer.mac
+        if($null -eq $MagicPacket) {
+            throw "Invalid MAC address: Required format is XX:XX:XX:XX:XX:XX or XX-XX-XX-XX-XX-XX."
+        }
+        $bytesSent = sendMagicPackage -MagicPacket $MagicPacket -BroadcastAddress $Context.Config.BroadcastAddress
+        if($bytesSent -ne $MagicPacket.Length){
+            throw "An unknown error has occurred. Check connection!"
+        }
+        return @{
+            Success = $true
+            Message = "Magic packet sent on port $Port via $BroadcastAddress for $($Context.Computer.hostname) ($MacAddress)."
+        }
     } catch {
-        Write-Error "Fehler beim Senden: $_"
-    } finally {
-        $UdpClient.Close()
+        return @{
+            Success = $false
+            Message = $_
+        }
     }
 }
 
-function ReadMacAddress {
+function buildMagicPackage {
     param (
-        [Parameter(Mandatory)][string]$ComputerName,
-        [Parameter(Mandatory)][PSCredential]$Credential
+        [Parameter(Mandatory)][string]$MacAddress
     )
-
     try {
-        $mac = Invoke-Command -ComputerName $ComputerName -Credential $Credential -ScriptBlock {
-            # Hole den primären physischen Netzwerkadapter (Ethernet, nicht virtuell)
-            $adapter = Get-NetAdapter | Where-Object { $_.InterfaceDescription -notlike "*Virtual*" -and $_.PhysicalMediaType -eq "802.3" } | Select-Object -First 1
-            if ($adapter) {
-                return $adapter.MacAddress
-            } else {
-                throw "Kein physischer Ethernet-Adapter gefunden."
-            }
+        $MacParts = $MacAddress -split "[:-]"
+        if ($MacParts.Count -ne 6) {
+            return
         }
-        Write-Output "MAC-Adresse von $ComputerName: $mac"
-        return $mac
+        $MacByteArray = $MacParts | ForEach-Object { [Byte] "0x$_" }
+        [Byte[]] $MagicPacket = (,0xFF * 6) + ($MacByteArray * 16)
+        return $MagicPacket
     } catch {
-        Write-Error "Fehler beim Auslesen von $ComputerName: $_"
+        return
+    }
+}
+
+function sendMagicPackage {
+    param (
+        [Parameter(Mandatory)][byte[]]$MagicPacket,
+        [string]$BroadcastAddress,
+        [int]$Port = 9  # 7 | 9
+    )
+    if(-not $BroadcastAddress){
+        $BroadcastAddress = ([System.Net.IPAddress]::Broadcast)
+    }
+    try {
+        $UdpClient = New-Object System.Net.Sockets.UdpClient
+        $UdpClient.Connect($BroadcastAddress, $Port) | Out-Null
+        $bytesSent = $UdpClient.Send($MagicPacket, $MagicPacket.Length) | Out-String
+        $UdpClient.Close()
+        return $bytesSent
+    } catch {
+        return
     }
 }

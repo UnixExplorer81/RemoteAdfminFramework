@@ -1,5 +1,10 @@
-
 function ReadMacAddress {
+    param (
+        [Parameter(Mandatory)][string]$Context
+    )
+}
+
+function ReadLocal {
     try {
         # Get the primary physical network adapter (Ethernet, not virtual or WIFI)
         $adapter = Get-NetAdapter | Where-Object { $_.InterfaceDescription -notlike "*Virtual*" -and $_.PhysicalMediaType -eq "802.3" } | Select-Object -First 1
@@ -19,7 +24,7 @@ function ReadMacAddress {
     }
 }
 
-function ReadRemoteMacAddress {
+function ReadRemote {
     param (
         [Parameter(Mandatory)][string]$ComputerName,
         [Parameter(Mandatory)][PSCredential]$Credential
@@ -27,7 +32,7 @@ function ReadRemoteMacAddress {
 
     try {
         $result = Invoke-Command -ComputerName $ComputerName -Credential $Credential -ScriptBlock {
-            return ReadMacAddress
+            return ReadLocal
         }
         if($null -ne $result) {
             if($result.success){

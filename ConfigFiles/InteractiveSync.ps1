@@ -28,7 +28,6 @@ function SyncAppDataOnDemand {
     $Registry = $Resolver.CreateProxy('REGISTRY', $Context, $null)
     Sync -FileMap @{
         # Starter
-        RemoteAdminBootstrapping = $Registry.RemoteAdminBootstrapping
         RemoteAdminRestApi = $Registry.RemoteAdminRestApi
         RemoteAdminTools = $Registry.RemoteAdminTools
         # Configs

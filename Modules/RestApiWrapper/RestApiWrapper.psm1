@@ -1,6 +1,4 @@
-﻿using module Pode
-
-# Universal REST API Wrapper
+﻿# Universal REST API Wrapper
 function RestApiWrapper {
     <#
         # Defining the API endpoint name
@@ -45,6 +43,7 @@ function RestApiWrapper {
         [int]$Port = 8080
     )
 
+    Import-Module Pode
 
     Start-PodeServer {
         Add-PodeEndpoint -Address * -Port $Port -Protocol Http
@@ -54,15 +53,17 @@ function RestApiWrapper {
             try {
                 # Validator ausführen (Scope des Wrappers!)
                 $payload = & $using:ApiValidator $Request
-                Import-Module Debugger
-                Inspect $payload
 
                 # Start-Script aufrufen (asynchron)
-                $job = Start-Job -FilePath $using:ApiPath -ArgumentList (, @{ $using:InputParamName = $payload })
-                # $job = Start-Job -ScriptBlock {
-                #     param($scriptPath, $ParamName, $Apiinput)
-                #     & $scriptPath -$ParamName $Apiinput
-                # } -ArgumentList @($ApiPath, $InputParamName, $payload)
+                $job = Start-Job -FilePath $using:ApiPath -ArgumentList $payload
+                
+                # $job = Start-Job -ArgumentList $using:ApiPath, $payload -ScriptBlock {
+                #     param(
+                #         [string]$ScriptPath,
+                #         [object]$ApiInput
+                #     )
+                #     & $ScriptPath $ApiInput
+                # }
 
                 Write-PodeJsonResponse -Value @{
                     status = "Job accepted"

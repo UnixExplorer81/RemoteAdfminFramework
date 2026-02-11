@@ -1,4 +1,4 @@
-﻿function Toggle-Comment {
+﻿function ToggleComment {
     $editor = $psISE.CurrentFile.Editor
     $selection = $editor.SelectedText
 

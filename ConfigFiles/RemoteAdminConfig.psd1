@@ -1,4 +1,6 @@
 @{
+    BroadcastAddress = "192.168.1.255"
+    Subnet = "192.168.1." # in stationselector gegen BroadcastAdresse austauschen
     ClientsCredPath = "{{USERPROFILE}}\AppData\Local\PowerShell\CredentialManager\DomainClients.xml"
     CredentialKey = "{{CREDENTIALKEY}}"
     CsvDelimiter = ";"
@@ -22,12 +24,11 @@
         target = "{{PROGRAMDATABASEDIR}}\PsRegistryConfig.psd1"
     }
     Servers = @("dc-1","dc-2","dc-3")
-    Subnet = "192.168.1."
     Coloring = @{
-        Path = "Cyan"
+        Path = "Yellow"
         Description = "Yellow"
-        MenuItem = "Yellow"
-        SelectedItem = "Green"
+        MenuItem = "Blue"
+        SelectedItem = "Cyan"
     }
     TrustedSite = "\\topcall.inc\shares\TrustedSites"
     UserModulePath =  "{{USERPROFILE}}\Documents\WindowsPowerShell\Modules"

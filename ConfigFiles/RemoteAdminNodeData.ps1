@@ -1,10 +1,10 @@
-﻿return [ordered]@{
+﻿using module StationSelector
+return [ordered]@{
     "Sound" = [ordered]@{
         "Reset VoiceMeter" = @(
             "Apply this to restore the desired default settings. This will restart VoiceMeter.",
             {
                 param($Context)
-                Import-Module StationSelector
                 InitStationSelectMenu -Context $Context
             }.GetNewClosure()
         )
@@ -12,7 +12,6 @@
             "Apply this to set VoiceMeter as default devices.",
             {
                 param($Context)
-                Import-Module StationSelector
                 InitStationSelectMenu -Context $Context
             }.GetNewClosure()
         )
@@ -23,7 +22,6 @@
             "Apply this if the soundboard doesn't react on keys, but on double-clicking presets.",
             {
                 param($Context)
-                Import-Module StationSelector
                 InitStationSelectMenu -Context $Context
             }.GetNewClosure(), @{
                 Name = "ExitDcsb"
@@ -60,7 +58,6 @@
             "Apply, if sounds are missing or there are no sounds. This will restart the soundboard.",
             {
                 param($Context)
-                Import-Module StationSelector
                 InitStationSelectMenu -Context $Context
             }.GetNewClosure(), @{
                 Name = "DependencyCollector"
@@ -116,7 +113,6 @@
             "Apply, if the previous option didnt fix the issue. This will restart the soundboard.",
             {
                 param($Context)
-                Import-Module StationSelector
                 InitStationSelectMenu -Context $Context
             }.GetNewClosure(), @{
                 Name = "DependencyCollector"
@@ -182,7 +178,6 @@
             "Apply this if all other options don't help. This will restart the soundboard.",
             {
                 param($Context)
-                Import-Module StationSelector
                 InitStationSelectMenu -Context $Context
             }.GetNewClosure(), @{
                 Name = "DependencyCollector"
@@ -259,7 +254,6 @@
             "Updateing the configuration while the soundboard is in use, without restarting.",
             {
                 param($Context)
-                Import-Module StationSelector
                 InitStationSelectMenu -Context $Context
             }.GetNewClosure(), @{
                 Name = "UpdateSoundsAndPresets"
@@ -288,7 +282,6 @@
             "Removes sounds and configuration files in all user accounts.",
             {
                 param($Context)
-                Import-Module StationSelector
                 InitStationSelectMenu -Context $Context
             }.GetNewClosure(), @{
                 Name = "DependencyCollector"
@@ -338,7 +331,6 @@
             "Apply this if there are any issues with the dialer which don't occur with all accounts / on all stations.",
             {
                 param($Context)
-                Import-Module StationSelector
                 InitStationSelectMenu -Context $Context
             }.GetNewClosure()
         )
@@ -347,7 +339,6 @@
             "This extracts and exports the active users' browsing history of the selected stations.",
             {
                 param($Context)
-                Import-Module StationSelector
                 InitStationSelectMenu -Context $Context
             }.GetNewClosure()
         )
@@ -358,7 +349,6 @@
             "Apply this if Windows displays offline status although the adapter LEDs are blinking.",
             {
                 param($Context)
-                Import-Module StationSelector
                 InitStationSelectMenu -Context $Context
             }.GetNewClosure()
         )
@@ -367,7 +357,6 @@
             "This doesn't disconnect the clients.",
             {
                 param($Context)
-                Import-Module StationSelector
                 InitStationSelectMenu -Context $Context
             }.GetNewClosure()
             
@@ -377,7 +366,6 @@
             "This will disconnect the selected clients for a few seconds.",
             {
                 param($Context)
-                Import-Module StationSelector
                 InitStationSelectMenu -Context $Context
             }.GetNewClosure()
         )
@@ -386,7 +374,6 @@
             "ATTENTION: Selected clients will reconnect, in case you change any IP oder subnetmask.",
             {
                 param($Context)
-                Import-Module StationSelector
                 InitStationSelectMenu -Context $Context
             }.GetNewClosure(), @{
                 Name = "RemoteModuleDeployment"
@@ -426,7 +413,6 @@
             "Request clients Mac address to register for wake on LAN",
             {
                 param($Context)
-                Import-Module StationSelector
                 InitStationSelectMenu -Context $Context
             }.GetNewClosure()
         )
@@ -435,18 +421,35 @@
             "Manually register clients for wake on LAN by entering their Mac address",
             {
                 param($Context)
-                Import-Module StationSelector
                 InitStationSelectMenu -Context $Context
             }.GetNewClosure()
         )
 
         "Wake up clients (WoL)" = @(
-            "Wake up clients by wake on LAN / magic packages",
+            "Wake up clients by wake on LAN / Magic Packages",
             {
                 param($Context)
-                Import-Module StationSelector
                 InitStationSelectMenu -Context $Context
-            }.GetNewClosure()
+            }.GetNewClosure(), @{ 
+                Name = "WakeOnLan"
+                DisplayName = "Wake client (WoL)"
+                Description = "Sending Magic Packet to wake up $($Context.Computer.hostname)"
+                Script = {
+                    param($Context)
+                    Import-Module WakeOnLan
+                    WakeOnLan -Context $Context
+                }
+                AffectsProgress = $true
+                WrappedFunction = $true
+            }, @{
+                Name = "JobComplete"
+                DisplayName = "Magic packet sent"
+                Description = "Operation completed"
+                Script = {
+                    param($Context)
+                    Write-Host "✅ Done on $($Context.Computer.hostname)"
+                }
+            }
         )
     }
     

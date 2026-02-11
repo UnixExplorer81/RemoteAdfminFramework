@@ -1,3 +1,5 @@
+using module RestApiWrapper
+
 # RemoteAdminApi.ps1
 <#
     $body = @{
@@ -19,11 +21,11 @@
 $ApiEndpoint = "remote-admin"
 
 # Defining Api script to wrapp by RestApiWrapper.ps1
-# $ApiPath = ".\RemoteAdminTools.ps1"
 $ApiPath = Join-Path $PSScriptRoot 'RemoteAdminTools.ps1'
+# $ApiPath = '.\RemoteAdminTools.ps1'
 
 # Defining API script payload parameter name
-$InputParamName = "-InvokeApi"
+$InputParamName = "InvokeApi"
 
 # Defining the request body validation script
 $ApiValidator = {
@@ -34,7 +36,7 @@ $ApiValidator = {
     # JSON-Body lesen
     $body = $Request.Body | ConvertFrom-Json -ErrorAction Stop
 
-    # Validierung (minimal)
+    # Validierung
     if ($null -eq $body.Path -or $body.Path -isnot [array] -or $body.Path.Count -eq 0) {
         Write-PodeJsonResponse -Value @{ error = "Path must be a non-empty string array" } -StatusCode 400
         return
@@ -46,5 +48,5 @@ $ApiValidator = {
         Memory = if($null -ne $body.Memory) { $body.Memory } else { @{} }
     }
 }
-Import-Module RestApiWrapper
+
 RestApiWrapper -ApiPath $ApiPath -InputParamName $InputParamName -ApiEndpoint $ApiEndpoint -ApiValidator $ApiValidator -Port 8080
