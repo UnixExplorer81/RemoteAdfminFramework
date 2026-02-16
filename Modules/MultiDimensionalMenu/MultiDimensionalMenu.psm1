@@ -1,4 +1,4 @@
-﻿function ShowMenu {
+﻿function MultiDimensionalMenu {
     param (
         [Parameter(Mandatory)][object]$Node,
         [Parameter(Mandatory)][object]$Context,
@@ -14,7 +14,7 @@
     }
     $MenuName = $script:CurrentMenuName
 
-    $items = $Node.GetEnumerator() | ForEach-Object { $_.Key }
+    $items = [string[]]$Node.Keys
 
     $selected = 0
 
@@ -48,7 +48,7 @@
                 $label = $items[$selected]
 
                 if ($choice -is [System.Collections.Hashtable] -or $choice -is [System.Collections.Specialized.OrderedDictionary]) {
-                    ShowMenu -Node $choice -Context $Context -Path ($Path + $label) -DisplayIndex $DisplayIndex
+                    MultiDimensionalMenu -Node $choice -Context $Context -Path ($Path + $label) -DisplayIndex $DisplayIndex
                 } elseif ($choice -is [object[]]) {
                     Clear-Host
                     Write-Host ""
@@ -68,7 +68,7 @@
                             Pause
                         }
                     }
-                    Write-Host "ℹ️ $description" -ForegroundColor Yellow
+                    Write-Host "ℹ️ $description" -ForegroundColor $Context.Config.Coloring.Description
 
                     if ($entryPoint -is [ScriptBlock]) {
                         if($tasks.Count){

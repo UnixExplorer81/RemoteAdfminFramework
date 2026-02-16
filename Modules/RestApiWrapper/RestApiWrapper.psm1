@@ -1,12 +1,17 @@
-﻿# Universal REST API Wrapper
+﻿
+<#
+    Universal REST API Wrapper
+    How to install Pode:
+    Install-Module Pode -Scope CurrentUser
+#>
 function RestApiWrapper {
     <#
         # Defining the API endpoint name
         $ApiEndpoint = "remote-admin"
 
         # Defining Api script to wrapp by RestApiWrapper.ps1
-        $ApiPath = ".\RemoteAdminTools.ps1"
-        $ApiPath = Join-Path $PSScriptRoot 'RemoteAdminTools.ps1'
+        $ApiPath = Join-Path $PSScriptRoot 'PsRemoteAdminFramework.ps1'
+        $ApiPath = ".\PsRemoteAdminFramework.ps1"
 
         # Defining API script payload parameter name
         $InputParamName = "-InvokeApi"
@@ -65,6 +70,15 @@ function RestApiWrapper {
                 #     & $ScriptPath $ApiInput
                 # }
 
+                # $response = @{}
+                # $response.status = "Job accepted"
+                # $response.jobId = $job.Id
+                # foreach ($key in $payload.Keys) {
+                #     $response[$key] = Flatten $payload[$key]
+                # }
+                # $response.started = Get-Date -Format "o"
+                # Write-PodeJsonResponse -Value $response -StatusCode 202
+
                 Write-PodeJsonResponse -Value @{
                     status = "Job accepted"
                     jobId = $job.Id
@@ -77,9 +91,24 @@ function RestApiWrapper {
             }
         }
 
-        # Status-Endpunkt (optional, zum Testen)
-        Add-PodeRoute -Method Get -Path '/api/status' -ScriptBlock {
-            Write-PodeJsonResponse -Value @{ status = "API running"; time = Get-Date -Format "o" }
-        }
+        # Add-PodeRoute -Method Get -Path "/api/$ApiEndpoint-status" -ScriptBlock {
+        #     $allJobs = Get-Job
+        #     $completedJobs = $allJobs | Where-Object { $_.State -eq 'Completed' }
+        #     $jobInfos = $completedJobs | ForEach-Object {
+        #         [ordered]@{
+        #             jobId = $_.Id
+        #             name  = $_.Name
+        #             state = $_.State
+        #             started = $_.PSBeginTime
+        #             finished = $_.PSEndTime
+        #         }
+        #     }
+        #     $jobInfos = $jobInfos | Sort-Object finished -Descending
+        #     Write-PodeJsonResponse -Value @{
+        #         status = "API running"
+        #         time = Get-Date -Format "o"
+        #         completedJobs = $jobInfos
+        #     }
+        # }
     }
 }

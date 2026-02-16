@@ -5,14 +5,14 @@ return [ordered]@{
             "Apply this to restore the desired default settings. This will restart VoiceMeter.",
             {
                 param($Context)
-                InitStationSelectMenu -Context $Context
+                StationSelector -Context $Context
             }.GetNewClosure()
         )
         "Reset sound settings" = @(
             "Apply this to set VoiceMeter as default devices.",
             {
                 param($Context)
-                InitStationSelectMenu -Context $Context
+                StationSelector -Context $Context
             }.GetNewClosure()
         )
     }
@@ -22,14 +22,13 @@ return [ordered]@{
             "Apply this if the soundboard doesn't react on keys, but on double-clicking presets.",
             {
                 param($Context)
-                InitStationSelectMenu -Context $Context
+                StationSelector -Context $Context
             }.GetNewClosure(), @{
                 Name = "ExitDcsb"
                 DisplayName = "Terminate Soundboard"
                 Description = "Exiting the Soundboard"
                 Script = {
                     param($Context)
-                    Import-Module RemoteDesktopProcess
                     StopRemoteDesktopProcess -Session $Context.Session -Path $Context.Config.DcsbPath
                 }
                 AffectsProgress = $true
@@ -39,13 +38,12 @@ return [ordered]@{
                 Description = "Launching Soundboard after applying fixes"
                 Script = {
                     param($Context)
-                    Import-Module RemoteDesktopProcess
                     StartRemoteDesktopProcess -Session $Context.Session -Path $Context.Config.DcsbPath
                 }
                 AffectsProgress = $true
             }, @{
                 Name = "JobComplete"
-                DisplayName = "Dcsb Fix"
+                DisplayName = "Soundboard Fix"
                 Description = "Operation completed"
                 Script = {
                     param($Context)
@@ -58,19 +56,8 @@ return [ordered]@{
             "Apply, if sounds are missing or there are no sounds. This will restart the soundboard.",
             {
                 param($Context)
-                InitStationSelectMenu -Context $Context
+                StationSelector -Context $Context
             }.GetNewClosure(), @{
-                Name = "DependencyCollector"
-                DisplayName = "Dependency Collector"
-                Description = "Collects module dependencies for all tasks of this job"
-                Script = {
-                    param($Context)
-                    Import-Module DependencyCollector
-                    DependencyCollector -Context $Context -JobDependencies @('DcsbFixes','DetectModulesBasePath','UserProfileUtilities','RemoteDesktopProcess')
-                }.GetNewClosure()
-                AffectsProgress = $true
-                WrappedFunction = $true
-            }, @{
                 Name = "ExitDcsb"
                 DisplayName = "Exit Soundboard"
                 Description = "Exiting Soundboard in order to apply fixes"
@@ -100,7 +87,7 @@ return [ordered]@{
                 AffectsProgress = $true
             }, @{
                 Name = "JobComplete"
-                DisplayName = "Dcsb Fix"
+                DisplayName = "Soundboard Fix"
                 Description = "Operation completed"
                 Script = {
                     param($Context)
@@ -113,19 +100,8 @@ return [ordered]@{
             "Apply, if the previous option didnt fix the issue. This will restart the soundboard.",
             {
                 param($Context)
-                InitStationSelectMenu -Context $Context
+                StationSelector -Context $Context
             }.GetNewClosure(), @{
-                Name = "DependencyCollector"
-                DisplayName = "Dependency Collector"
-                Description = "Collects module dependencies for all tasks of this job"
-                Script = {
-                    param($Context)
-                    Import-Module DependencyCollector
-                    DependencyCollector -Context $Context -JobDependencies @('DcsbFixes','RemoteDesktopProcess')
-                }.GetNewClosure()
-                AffectsProgress = $true
-                WrappedFunction = $true
-            }, @{
                 Name = "ExitDcsb"
                 DisplayName = "Exit Soundboard"
                 Description = "Exiting Soundboard in order to apply fixes"
@@ -165,7 +141,7 @@ return [ordered]@{
                 AffectsProgress = $true
             }, @{
                 Name = "JobComplete"
-                DisplayName = "Dcsb Fix"
+                DisplayName = "Soundboard Fix"
                 Description = "Operation completed"
                 Script = {
                     param($Context)
@@ -178,19 +154,8 @@ return [ordered]@{
             "Apply this if all other options don't help. This will restart the soundboard.",
             {
                 param($Context)
-                InitStationSelectMenu -Context $Context
+                StationSelector -Context $Context
             }.GetNewClosure(), @{
-                Name = "DependencyCollector"
-                DisplayName = "Dependency Collector"
-                Description = "Collects module dependencies for all tasks of this job"
-                Script = {
-                    param($Context)
-                    Import-Module DependencyCollector
-                    DependencyCollector -Context $Context -JobDependencies @('CredentialInjector','CredentialManager','DcsbFixes','RemoteDesktopProcess')
-                }.GetNewClosure()
-                AffectsProgress = $true
-                WrappedFunction = $true
-            }, @{
                 Name = "ExitDcsb"
                 DisplayName = "Exit Soundboard"
                 Description = "Exiting Soundboard in order to apply updates"
@@ -217,9 +182,9 @@ return [ordered]@{
                 Script = {
                     ResetGlobalConfig
                 }
-                WrappedFunction = $true
                 RemoteExecution = $true
                 AffectsProgress = $true
+                WrappedFunction = $true
             }, @{
                 Name = "DumpMessedUpUserConfig"
                 DisplayName = "Delete current users Soundboard config"
@@ -241,7 +206,7 @@ return [ordered]@{
                 AffectsProgress = $true
             }, @{
                 Name = "JobComplete"
-                DisplayName = "Dcsb Fix"
+                DisplayName = "Soundboard Fix"
                 Description = "Operation completed"
                 Script = {
                     param($Context)
@@ -254,14 +219,13 @@ return [ordered]@{
             "Updateing the configuration while the soundboard is in use, without restarting.",
             {
                 param($Context)
-                InitStationSelectMenu -Context $Context
+                StationSelector -Context $Context
             }.GetNewClosure(), @{
                 Name = "UpdateSoundsAndPresets"
                 DisplayName = "Update sounds and presets"
                 Description = "Running the UpdateDeployment to check for divergences to the server"
                 Script = {
                     param($Context)
-                    Import-Module DcsbFixes
                     UpdateSoundsAndPresets -Context $Context
                 }.GetNewClosure()
                 WrappedFunction = $true
@@ -269,7 +233,7 @@ return [ordered]@{
                 AffectsProgress = $true
             }, @{
                 Name = "JobComplete"
-                DisplayName = "Dcsb Fix"
+                DisplayName = "Soundboard Fix"
                 Description = "Operation completed"
                 Script = {
                     param($Context)
@@ -282,19 +246,8 @@ return [ordered]@{
             "Removes sounds and configuration files in all user accounts.",
             {
                 param($Context)
-                InitStationSelectMenu -Context $Context
+                StationSelector -Context $Context
             }.GetNewClosure(), @{
-                Name = "DependencyCollector"
-                DisplayName = "Dependency Collector"
-                Description = "Collects module dependencies for all tasks of this job"
-                Script = {
-                    param($Context)
-                    Import-Module DependencyCollector
-                    DependencyCollector -Context $Context -JobDependencies @('RemoteDesktopProcess','DcsbFixes')
-                }.GetNewClosure()
-                AffectsProgress = $true
-                WrappedFunction = $true
-            }, @{
                 Name = "ExitDcsb"
                 DisplayName = "Exit Soundboard"
                 Description = "Exiting Soundboard in order to apply updates"
@@ -316,7 +269,7 @@ return [ordered]@{
                 AffectsProgress = $true
             }, @{
                 Name = "JobComplete"
-                DisplayName = "Dcsb Cleanup"
+                DisplayName = "Soundboard Cleanup"
                 Description = "Operation completed"
                 Script = {
                     param($Context)
@@ -331,7 +284,7 @@ return [ordered]@{
             "Apply this if there are any issues with the dialer which don't occur with all accounts / on all stations.",
             {
                 param($Context)
-                InitStationSelectMenu -Context $Context
+                StationSelector -Context $Context
             }.GetNewClosure()
         )
 
@@ -339,7 +292,7 @@ return [ordered]@{
             "This extracts and exports the active users' browsing history of the selected stations.",
             {
                 param($Context)
-                InitStationSelectMenu -Context $Context
+                StationSelector -Context $Context
             }.GetNewClosure()
         )
     }
@@ -349,7 +302,7 @@ return [ordered]@{
             "Apply this if Windows displays offline status although the adapter LEDs are blinking.",
             {
                 param($Context)
-                InitStationSelectMenu -Context $Context
+                StationSelector -Context $Context
             }.GetNewClosure()
         )
 
@@ -357,7 +310,7 @@ return [ordered]@{
             "This doesn't disconnect the clients.",
             {
                 param($Context)
-                InitStationSelectMenu -Context $Context
+                StationSelector -Context $Context
             }.GetNewClosure()
             
         )
@@ -366,7 +319,7 @@ return [ordered]@{
             "This will disconnect the selected clients for a few seconds.",
             {
                 param($Context)
-                InitStationSelectMenu -Context $Context
+                StationSelector -Context $Context
             }.GetNewClosure()
         )
 
@@ -374,33 +327,37 @@ return [ordered]@{
             "ATTENTION: Selected clients will reconnect, in case you change any IP oder subnetmask.",
             {
                 param($Context)
-                InitStationSelectMenu -Context $Context
-            }.GetNewClosure(), @{
-                Name = "RemoteModuleDeployment"
-                DisplayName = "Install/update modules"
-                Description = "Checking and installing the required modules on the selected stations, if missing"
-                Script = {
-                    param($Context)
-                    Import-Module RemoteModuleDeployment
-                    RemoteModuleDeployment -Context $Context -TaskRequires @('CredentialManager','NetUseAuthentification','UpdateDeployment','UserProfileUtilities')
-                }.GetNewClosure()
-                WrappedFunction = $true
-                RemoteExecution = $true
-                AffectsProgress = $true
-                RenewSession = $true
-            }, @{ 
+                StationSelector -Context $Context
+            }.GetNewClosure(), @{ 
                 Name = "ShowNetConfigurator"
                 DisplayName = "Shows the network configuration interface"
                 Description = "Launching Soundboard after applying fixes"
                 Script = {
                     param($Context)
-                    Import-Module NetConfigAssistant
                     ShowNetConfigAssistant -Context $Context
                 }
                 AffectsProgress = $true
             }, @{
                 Name = "JobComplete"
-                DisplayName = "Dcsb Fix"
+                DisplayName = "Client Network Adapter configuration"
+                Description = "Operation completed"
+                Script = {
+                    param($Context)
+                    Write-Host "✅ Done on $($Context.Computer.hostname)"
+                }
+            }
+        )
+    }
+    
+    "GPOs" = [ordered]@{
+        "Task Scheduler" = @(
+            "Scheduler to run specific tasks",
+            {
+                param($Context)
+                TaskScheduler -Context $Context
+            }.GetNewClosure(), @{
+                Name = "JobComplete"
+                DisplayName = "Task Scheduler execution"
                 Description = "Operation completed"
                 Script = {
                     param($Context)
@@ -409,34 +366,41 @@ return [ordered]@{
             }
         )
 
-        "Automatic Mac address registration for WoL" = @(
+        "Automatic client registration" = @(
             "Request clients Mac address to register for wake on LAN",
             {
                 param($Context)
-                InitStationSelectMenu -Context $Context
+                StationSelector -Context $Context
             }.GetNewClosure()
         )
 
-        "Manually enter Mac addresses" = @(
-            "Manually register clients for wake on LAN by entering their Mac address",
+        "Enter MAC addresses manually" = @(
+            "Manually register clients for wake on LAN by entering their MAC address",
             {
                 param($Context)
-                InitStationSelectMenu -Context $Context
+                if($null -eq $Context.Memory.RegisterMacAddress -and $null -eq $Context.Memory.RegisterMacAddress.Computer){
+                    $Context.Memory.RegisterMacAddress = @{}
+                    $Context.Memory.RegisterMacAddress.Computer = @{
+                        hostname = Read-Host "Hostname for which to register the MAC address"
+                        mac = Read-Host "MAC address"
+                    }
+                }
+                RegisterMacAddress -Context $Context
             }.GetNewClosure()
         )
 
-        "Wake up clients (WoL)" = @(
-            "Wake up clients by wake on LAN / Magic Packages",
+        "Wake up clients" = @(
+            "Wake up clients via wake on LAN / Magic Packages",
             {
                 param($Context)
-                InitStationSelectMenu -Context $Context
+                StationSelector -Context $Context
             }.GetNewClosure(), @{ 
                 Name = "WakeOnLan"
                 DisplayName = "Wake client (WoL)"
                 Description = "Sending Magic Packet to wake up $($Context.Computer.hostname)"
                 Script = {
                     param($Context)
-                    Import-Module WakeOnLan
+                    # & $Context.DependencyInjector.ImportModule 'WakeOnLan'
                     WakeOnLan -Context $Context
                 }
                 AffectsProgress = $true
@@ -451,15 +415,40 @@ return [ordered]@{
                 }
             }
         )
-    }
-    
-    "GPOs" = [ordered]@{
+        
+        "Module Deployment" = @(
+            "Module deployment of specific PowerShell modules on remote clients",
+            {
+                param($Context)
+                StationSelector -Context $Context
+            }.GetNewClosure(), @{
+                Name = "RemoteModuleDeployment"
+                DisplayName = "Install/update modules"
+                Description = "Installing/updating modules on remote clients"
+                Script = {
+                    param($Context)
+                    RemoteModuleDeployment -Context $Context -TaskRequires @('CredentialManager','NetUseAuthentification','UpdateDeployment','UserProfileUtilities')
+                }.GetNewClosure()
+                AffectsProgress = $true
+                RemoteExecution = $true
+                WrappedFunction = $true
+                RenewSession = $true
+            }, @{
+                Name = "JobComplete"
+                DisplayName = "Client Network Adapter configuration"
+                Description = "Operation completed"
+                Script = {
+                    param($Context)
+                    Write-Host "✅ Done on $($Context.Computer.hostname)"
+                }
+            }
+        )
+
         "GpUpdate" = @(
             "This applys the GPOs.",
             {
                 param($Context)
-                Import-Module StationSelector
-                InitStationSelectMenu -Context $Context
+                StationSelector -Context $Context
             }.GetNewClosure(), @{
                 Name = "GpUpdate"
                 DisplayName = "GpUpdate execution"
@@ -483,8 +472,7 @@ return [ordered]@{
             "This applys the GPOs. ATTENTION: Clients might restart without asking for confirmation!",
             {
                 param($Context)
-                Import-Module StationSelector
-                InitStationSelectMenu -Context $Context
+                StationSelector -Context $Context
             }.GetNewClosure(), @{
                 Name = "GpUpdateForce"
                 DisplayName = "GpUpdate /force execution"
@@ -510,8 +498,7 @@ return [ordered]@{
             "To change the username of a specific user on selected stations",
             {
                 param($Context)
-                Import-Module StationSelector
-                InitStationSelectMenu -Context $Context
+                StationSelector -Context $Context
             }.GetNewClosure()
             # usw.
         )
@@ -520,21 +507,20 @@ return [ordered]@{
             "To change the password of a specific user",
             {
                 param($Context)
-                    if($null -eq $Context.Memory.ChangePassword){
+                if($null -eq $Context.Memory.ChangePassword){
                     $Context.Memory.ChangePassword = @{
                         Username = Read-Host "User whose password to change"
                         Password = Read-Host "New Password" -AsSecureString
                     }
                 }
-                Import-Module StationSelector
-                InitStationSelectMenu -Context $Context
+                StationSelector -Context $Context
             }.GetNewClosure(), @{
                 Name = "Password change"
                 DisplayName = "Password change for the specified user"
                 Description = "Changes password for the specified user on selected stations"
                 Script = {
                     param($Context)
-                    Import-Module ChangePassword
+                    & $Context.DependencyInjector.ImportModule 'ChangePassword'
                     ChangePassword -Username $Context.Memory.ChangePassword.Username -Password $Context.Memory.ChangePassword.Password
                 }
                 WrappedFunction = $true

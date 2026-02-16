@@ -6,26 +6,26 @@ function WakeOnLan {
     if(-not $Context.Computer.mac){
         return @{
             Success = $false
-            Message = "MAC address missing for $($Context.Computer.hostname)"
+            Message = "WakeOnLan: MAC address missing for $($Context.Computer.hostname)"
         }
     }
     try {
         $MagicPacket = buildMagicPackage -MacAddress $Context.Computer.mac
         if($null -eq $MagicPacket) {
-            throw "Invalid MAC address: Required format is XX:XX:XX:XX:XX:XX or XX-XX-XX-XX-XX-XX."
+            throw "WakeOnLan: Invalid MAC address: Required format is XX:XX:XX:XX:XX:XX or XX-XX-XX-XX-XX-XX."
         }
         $bytesSent = sendMagicPackage -MagicPacket $MagicPacket -BroadcastAddress $Context.Config.BroadcastAddress
-        if($bytesSent -ne $MagicPacket.Length){
-            throw "An unknown error has occurred. Check connection!"
+        if([int]$bytesSent -ne $MagicPacket.Length){
+            throw "WakeOnLan: An unknown error has occurred. Check connection!"
         }
         return @{
             Success = $true
-            Message = "Magic packet sent on port $Port via $BroadcastAddress for $($Context.Computer.hostname) ($MacAddress)."
+            Message = "WakeOnLan: Magic packet sent via $($Context.Config.BroadcastAddress) for $($Context.Computer.hostname) ($MacAddress)."
         }
     } catch {
         return @{
             Success = $false
-            Message = $_
+            Message = "WakeOnLan: Error on $($Context.Computer.hostname): $_"
         }
     }
 }

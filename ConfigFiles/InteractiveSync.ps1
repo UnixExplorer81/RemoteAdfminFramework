@@ -17,9 +17,9 @@ function SyncAppDataOnDemand {
     $Context = [pscustomobject]@{
         Resolver = $Resolver
     }
-    $callbacks = & 'C:\ProgramData\PowerShell\PlaceholderCallbacks.ps1'
+    $callbacks = & 'C:\ProgramData\PowerShell\PsRemoteAdminFramework\PlaceholderCallbacks.ps1'
     $Resolver.RegisterCallbacks($callbacks)
-    $CfgPsd = Import-PowerShellDataFile "C:\ProgramData\PowerShell\RemoteAdminTools\Config.psd1"
+    $CfgPsd = Import-PowerShellDataFile "C:\ProgramData\PowerShell\PsRemoteAdminFramework\Config.psd1"
     $Resolver.RegisterSource('CONFIG', $CfgPsd)
     $Config = $Resolver.CreateProxy('CONFIG', $Context, @('AsHashtable'))
     $Context | Add-Member -NotePropertyName 'Config' -NotePropertyValue $Config
@@ -28,8 +28,8 @@ function SyncAppDataOnDemand {
     $Registry = $Resolver.CreateProxy('REGISTRY', $Context, $null)
     Sync -FileMap @{
         # Starter
+        PsRemoteAdminFramework = $Registry.PsRemoteAdminFramework
         RemoteAdminRestApi = $Registry.RemoteAdminRestApi
-        RemoteAdminTools = $Registry.RemoteAdminTools
         # Configs
         InteractiveSync = $Registry.InteractiveSync
         RemoteAdminData = $Registry.RemoteAdminData

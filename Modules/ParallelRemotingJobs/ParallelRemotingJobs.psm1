@@ -1,5 +1,6 @@
 ﻿using module ProxyPlaceholderResolver
 using module ParamNormalization
+using module ComputerActive
 
 function ParallelRemotingJobs {
     [CmdletBinding()]
@@ -20,55 +21,60 @@ function ParallelRemotingJobs {
                 [pscredential]$Credential,
                 [object]$Context
             )
-            if($task.RemoteExecution) {
+            if(ComputerActive -Computer $Computer) {
                 $session = New-PSSession -ComputerName $Computer.ip -Credential $Credential
+            } else {
+                $session = $null
             }
-            if($session -or -not $task.RemoteExecution){
-                try {
-                    $results = [System.Collections.ArrayList]::new()
-                    foreach ($task in $Context.Tasks) {
-                        try {
-                            $runtimeState = @{
-                                Computer = $Computer
-                                Session  = $session
-                            }
-                            $params = ParamNormalization -Task $task -Context $Context -RuntimeState $runtimeState -Verbose:$Context.Config.Verbose
-                            $result = if ($task.RemoteExecution) {
-                                Invoke-Command -Session $session @params
-                            } else {
-                                & $params.ScriptBlock $params.ArgumentList[0]
-                            }
-
-                            if ($task.RenewSession -eq $true) {
-                                if($null -ne $session){
-                                    Remove-PSSession -Session $session
-                                }
-                                $session = New-PSSession -ComputerName $Computer.ip -Credential $Credential
-                            }
-
-                            $results.Add(@{
-                                Computer = $Computer
-                                DisplayName = $task.DisplayName
-                                Description = $task.Description
-                                AffectsProgress = $task.AffectsProgress
-                                Result = $result
-                            })
-                        } catch {
-                            $results.Add(@{
-                                Computer = $Computer
-                                DisplayName = $task.DisplayName
-                                Description = $task.Description
-                                AffectsProgress = $task.AffectsProgress
-                                Result = $_
-                            })
+            try {
+                $results = [System.Collections.ArrayList]::new()
+                foreach ($task in $Context.Tasks) {
+                    try {
+                        $runtimeState = @{
+                            Computer = $Computer
+                            Session  = $session
                         }
+                        $params = ParamNormalization -Task $task -Context $Context -RuntimeState $runtimeState -Verbose:$Context.Config.Verbose
+                        $result = if ($null -ne $session -and $task.RemoteExecution) {
+                            Invoke-Command -Session $session @params
+                        } elseif (-not $task.RemoteExecution) {
+                            & $params.ScriptBlock $params.ArgumentList[0]
+                        } else {
+                            $result = @{
+                                Success = $false
+                                Message = "ParallelRemotingJobs: RemoteExecution active but $session could not be established" 
+                            }
+                        }
+
+                        if ($task.RenewSession -eq $true) {
+                            if($null -ne $session){
+                                Remove-PSSession -Session $session
+                            }
+                            $session = New-PSSession -ComputerName $Computer.ip -Credential $Credential
+                        }
+
+                        $results.Add(@{
+                            Computer = $Computer
+                            DisplayName = $task.DisplayName
+                            Description = $task.Description
+                            AffectsProgress = $task.AffectsProgress
+                            Result = $result
+                        })
+                    } catch {
+                        $results.Add(@{
+                            Computer = $Computer
+                            DisplayName = $task.DisplayName
+                            Description = $task.Description
+                            AffectsProgress = $task.AffectsProgress
+                            Result = $_
+                        })
                     }
-                } catch {
-                    Write-Debug "Error on $($Computer.hostname): $_"
-                    continue
-                } finally {
-                    Remove-PSSession $session
                 }
+            } catch {
+                Write-Debug "Error on $($Computer.hostname): $_"
+                continue
+            } finally {
+                Remove-PSSession $session
             }
             if($Context.Config.Verbose){
                 Import-Module Debugger

@@ -21,8 +21,8 @@ using module RestApiWrapper
 $ApiEndpoint = "remote-admin"
 
 # Defining Api script to wrapp by RestApiWrapper.ps1
-$ApiPath = Join-Path $PSScriptRoot 'RemoteAdminTools.ps1'
-# $ApiPath = '.\RemoteAdminTools.ps1'
+$ApiPath = Join-Path $PSScriptRoot 'PsRemoteAdminFramework.ps1'
+# $ApiPath = '.\PsRemoteAdminFramework.ps1'
 
 # Defining API script payload parameter name
 $InputParamName = "InvokeApi"

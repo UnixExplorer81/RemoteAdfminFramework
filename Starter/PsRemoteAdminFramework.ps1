@@ -1,32 +1,66 @@
 ﻿using module ProxyPlaceholderResolver
+using module CapabilityProvider
+Using Module Debugger
 using module Logger
 
-# Eamples
+# API call examples
 <#
-    .\RemoteAdminTools.ps1 -InvokeApi @{
-        Path   = @("Network", "Wake Clients (WoL)")
+    .\PsRemoteAdminFramework.ps1 -InvokeApi @{
+        Path   = @("GPOs", "Task Scheduler", "Wake All Clients")
+    }
+    .\PsRemoteAdminFramework.ps1 -InvokeApi @{
+        Path   = @("GPOs", "Wake up Clients", "Specific Clients")
         Memory = @{
             StationSelector = @{
-                selection = @("AI-086")
+                selection = @("PC-001", "PC-002", "PC-003")
             }
         }
-    }
-    .\RemoteAdminTools.ps1 -InvokeApi @{ 
-        Path = @("Soundboard", "Restart (if hotkey recognition fails)", "Specific stations")
-        Memory = @{ StationSelector = @{ selection = @("AI-086") } }
     }
 #>
 [CmdletBinding(DefaultParameterSetName = 'Interactive')]
 param(
+    [Parameter(Mandatory = $true, ParameterSetName = 'ApiMode', Position = 0)]
+    [object]$InvokeApi,
+
     [Parameter(ParameterSetName = 'Interactive')]
     [switch]$ExecutedByShortcut,
+    [switch]$SkipUpdateCheck,
+    [bool]$EnableDebugLogging = $true,
 
-    [Parameter(Mandatory = $true, ParameterSetName = 'ApiMode', Position = 0)]
-    [object]$InvokeApi
+    [string]$BootstrapRoot = "\\topcall.inc\shares\PowerShell_Framework$",
+    [string]$ProgramDataBaseDir = "C:\ProgramData\PowerShell",
+    [string]$ProgramData = "$ProgramDataBaseDir\PsRemoteAdminFramework",
+    [string]$LogPath = "$ProgramData\Progress.log"
 )
 
-$fallbackLogPath = "C:\ProgramData\PowerShell\RemoteAdminTools\Progress.log"
-$global:EnableDebugLogging = $true
+$script:ApiPath = $PSCommandPath
+
+# Essencial callbacks to resolve PsRegistryConfig
+$callbacks = @{
+    'REPOSITORY' = {
+        $BootstrapRoot
+    }
+    'PROGRAMDATABASEDIR' = {
+        $ProgramDataBaseDir
+    }
+    'MODULESBASE' = {
+        $globalPath = "C:\Program Files\PowerShell\Modules"
+        $userPath   = Join-Path $env:USERPROFILE "Documents\PowerShell\Modules"
+
+        if (Test-Path $globalPath) {
+            try {
+                $testFile = Join-Path $globalPath ".test"
+                "test" | Out-File $testFile -Force -ErrorAction Stop
+                Remove-Item $testFile -Force -ErrorAction Stop
+                return $globalPath
+            } catch {
+                return $userPath
+            }
+        } else {
+            return $userPath
+        }
+    }
+}
 
 function FallbackLog {
     param($msg, [switch]$warning, [switch]$error, [switch]$force)
@@ -39,7 +73,7 @@ function FallbackLog {
     } else {
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
         $line = "[$timestamp] $msg"
-        $line | Out-File -FilePath $fallbackLogPath -Encoding UTF8 -Append -Force
+        $line | Out-File -FilePath $LogPath -Encoding UTF8 -Append -Force
     }
     if($EnableDebugLogging){
         if ($error) { Write-Error $msg }
@@ -61,24 +95,42 @@ try {
         }
         $Memory = if ($null -ne $InvokeApi.Memory) { $InvokeApi.Memory } else { @{} }
     } else {
-        Start-Sleep -Seconds 1
+        # try {
+        #     Import-Module ClassLoader -ErrorAction Stop
+        # } catch {
+        #     Invoke-Expression (Get-Content (Join-Path $BootstrapRoot "Modules\ClassLoader\ClassLoader.psm1") -Raw -Encoding UTF8 -ErrorAction Stop)
+        # } finally {
+        #     if(Get-Command ClassLoader -ErrorAction SilentlyContinue){
+        #         $Modules = @(
+        #             "FileAndDirectoryOperations",
+        #             "ProxyPlaceholderResolver",
+        #             "CreatePsStartFileLink",
+        #             "CapabilityProvider"  
+        #             "Debugger",
+        #             "Logger"
+        #         )
+        #         ClassLoader -RootDirectory $BootstrapRoot -Modules $Modules
+        #     }
+        # }
         if (-not $ExecutedByShortcut) {
-            Import-Module CreatePsStartFileLink
+            if(Get-Command CreatePsStartFileLink -ErrorAction Stop) {
+                Import-Module CreatePsStartFileLink
+            }
             CreatePsStartFileLink -TargetScript $MyInvocation.MyCommand.Definition -PS7
             Start-Sleep -Seconds 1
         }
         $Memory = @{}
     }
-
     $Context = [pscustomobject]@{}
     $Resolver = [ProxyPlaceholderResolver]::new()
     $Context | Add-Member -NotePropertyName 'Resolver' -NotePropertyValue $Resolver
-    $callbacks = & 'C:\ProgramData\PowerShell\PlaceholderCallbacks.ps1'
+    $callbacks = & (Join-Path $ProgramData 'PlaceholderCallbacks.ps1')
     $Resolver.RegisterCallbacks($callbacks)
-    $CfgPsd = Import-PowerShellDataFile "C:\ProgramData\PowerShell\RemoteAdminTools\Config.psd1"
+    $CfgPsd = Import-PowerShellDataFile (Join-Path $ProgramData "Config.psd1")
     $Resolver.RegisterSource('CONFIG', $CfgPsd)
     $Config = $Resolver.CreateProxy('CONFIG', $Context, @('AsHashtable','GetKeys'))
     $Context | Add-Member -NotePropertyName 'Config' -NotePropertyValue $Config
+    # Start-Sleep -Seconds 1
     $Logger = [Logger]::new(@{
         LogInfo         = $Config.LogProgress
         LogErrors       = $Config.LogErrors
@@ -91,23 +143,22 @@ try {
     $Resolver.RegisterSource('REGISTRY', $RegPsd)
     $Registry = $Resolver.CreateProxy('REGISTRY', $Context, @('AsHashtable','Filter','GetKeys','GetRecords'))
     $Context | Add-Member -NotePropertyName 'Registry' -NotePropertyValue $Registry
+    $DependencyProvider = DependencyProvider $Context
+    $DependencyInjector = & $DependencyProvider.ScriptBlock $DependencyProvider.ArgumentList
+    $Context | Add-Member -NotePropertyName 'DependencyProvider' -NotePropertyValue $DependencyProvider
+    $Context | Add-Member -NotePropertyName 'DependencyInjector' -NotePropertyValue $DependencyInjector
     $Context | Add-Member -NotePropertyName 'Memory' -NotePropertyValue $Memory
     $Context.Logger.Info("--- 🖥️ $($env:COMPUTERNAME) - Running as: 👤 $(whoami) ---")
     $Node = & (Join-Path $Config.ProgramData $Config.ProgramNodes)
     if ($IsApiMode) {
-        Import-Module ExecuteApiRequest
-        ExecuteApiRequest -Node $Node -Path $InvokeApi.Path -Context $Context
+        ResolveApiRequestPath -Node $Node -Path $InvokeApi.Path -Context $Context
     } else {
-        Import-Module MultiDimensionalMenu
-        ShowMenu -Node $Node -Context $Context -MenuName $Config.MenuName -DisplayIndex $Config.DisplayIndex
+        MultiDimensionalMenu -Node $Node -Context $Context -MenuName $Config.MenuName -DisplayIndex $Config.DisplayIndex
     }
 } catch {
-
-    # ──────────────────────────────────────────────────────────────
-    # Phase 0 – Minimal Fallback-Logger und Banner
-    # ──────────────────────────────────────────────────────────────
-
-    function updateBanner {
+    $_.Exception.Message
+    pause
+function updateBanner {
     return @"
 
 ╔══════════════════════════════════════════════════════════════╗
@@ -118,9 +169,9 @@ try {
 ╚══════════════════════════════════════════════════════════════╝
 
 "@
-    }
+}
 
-    function completeBanner {
+function completeBanner {
     return @"
 
 ╔══════════════════════════════════════════════════════════════╗
@@ -130,8 +181,8 @@ try {
 ╚══════════════════════════════════════════════════════════════╝
 
 "@
-    }
-    function offlineBanner {
+}
+function offlineBanner {
     return @"
 
 ╔══════════════════════════════════════════════════════════════╗
@@ -143,34 +194,16 @@ try {
 ╚══════════════════════════════════════════════════════════════╝
 
 "@
-    }
-    $ProgressBar = {
-        param(
-            [string]$Activity,
-            [string]$Status,
-            [int]$Percent
-        )
-        if ($Host.Name -ne 'ConsoleHost') { return }
-        if($Percent -le 100){
-            Start-Sleep -MilliSeconds 250
-            Write-Progress -Activity $Activity -Status $Status -PercentComplete $Percent
-        }else{
-            Start-Sleep -Seconds 1
-            Write-Progress -Activity $Activity -Completed
-        }        
-    }
-    $totalSteps = 11
-    $currentStep = 0
-    function calcPercentages {
-        $percent = $global:currentStep / $totalSteps * 100
-        $global:currentStep++
-        return $percent
-    }
+}
+    # ──────────────────────────────────────────────────────────────
+    # Bootstraping/Fixing
+    # ──────────────────────────────────────────────────────────────
+
     $statusMessages = @{
         offline = $(
             "Fatal error while main program initialization`:",
             $_.Exception.Message,
-            "Bootstrap repository not available: $bootstrapRoot"
+            "Bootstrap repository not available: $BootstrapRoot"
         )
         beginning = "Beginning installation"
         installing = "Installation in progress..."
@@ -191,14 +224,32 @@ try {
         terminating = "Remote Admin Framework terminated"
     }
 
-    # ──────────────────────────────────────────────────────────────
-    # Bootstraping/Fixing
-    # ──────────────────────────────────────────────────────────────
+    $ProgressBar = {
+        param(
+            [string]$Activity,
+            [string]$Status,
+            [int]$Percent
+        )
+        if ($Host.Name -ne 'ConsoleHost') { return }
+        if($Percent -le 100){
+            Start-Sleep -MilliSeconds 250
+            Write-Progress -Activity $Activity -Status $Status -PercentComplete $Percent
+        }else{
+            Start-Sleep -Seconds 1
+            Write-Progress -Activity $Activity -Completed
+        }        
+    }
+
+    $totalSteps = 11
+    $currentStep = 0
+    function calcPercentages {
+        $percent = $global:currentStep / $totalSteps * 100
+        $global:currentStep++
+        return $percent
+    }
 
     # Check repository availability
-    $bootstrapRoot = "\\topcall.inc\shares\PowerShell_Framework$"
-
-    if (-not (Test-Path $bootstrapRoot)) {
+    if (-not (Test-Path $BootstrapRoot)) {
         Clear-Host
         offlineBanner
         FallbackLog $statusMessages.offline[0] -Force
@@ -213,35 +264,8 @@ try {
         FallbackLog $statusMessages.updating -Force
     }
 
-    # Essencial callbacks to resolve PsRegistryConfig
-    $callbacks = @{
-        'REPOSITORY' = {
-            "\\topcall.inc\shares\PowerShell_Framework$"
-        }
-        'PROGRAMDATABASEDIR' = {
-            "C:\ProgramData\PowerShell"
-        }
-        'MODULESBASE' = {
-            $globalPath = "C:\Program Files\PowerShell\Modules"
-            $userPath   = "$env:USERPROFILE\Documents\PowerShell\Modules"
-
-            if (Test-Path $globalPath) {
-                try {
-                    $testFile = Join-Path $globalPath ".test"
-                    "test" | Out-File $testFile -Force -ErrorAction Stop
-                    Remove-Item $testFile -Force -ErrorAction Stop
-                    return $globalPath
-                } catch {
-                    return $userPath
-                }
-            } else {
-                return $userPath
-            }
-        }
-    }
-
     # Loading PsRegistryConfig
-    $RegPsdSource = Join-Path $bootstrapRoot "ConfigFiles\PsRegistryConfig.psd1"
+    $RegPsdSource = Join-Path $BootstrapRoot "ConfigFiles\PsRegistryConfig.psd1"
     $regPsdContent = Get-Content $RegPsdSource -Raw
     & $ProgressBar "Step $currentStep" $statusMessages.loadedRegistry (calcPercentages)
     FallbackLog $statusMessages.loadedRegistry -Force
@@ -261,7 +285,9 @@ try {
     FallbackLog $statusMessages.convertedRegistry -Force
 
     # Loading ProxyPlaceholderResolver
-    Invoke-Expression (Get-Content $RegPsd.ProxyPlaceholderResolver.source -Raw)
+    if (-not ('ProxyPlaceholderResolver' -as [Type])) {
+        Invoke-Expression (Get-Content $RegPsd.ProxyPlaceholderResolver.source -Raw)
+    }
     $Resolver = [ProxyPlaceholderResolver]::new()
     & $ProgressBar "Step $currentStep" $statusMessages.loadedResolver (calcPercentages)
     FallbackLog $statusMessages.loadedResolver -Force

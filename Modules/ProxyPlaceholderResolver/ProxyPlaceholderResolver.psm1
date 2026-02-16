@@ -1,4 +1,5 @@
 ﻿class ProxyPlaceholderResolver {
+    
     [hashtable]$Sources
     [hashtable]$Callbacks
     [System.Collections.ArrayList]$Proxies

@@ -45,7 +45,7 @@
     $Shortcut.TargetPath = $targetPath
     $Shortcut.Arguments  = $Arguments
     $Shortcut.WorkingDirectory = Split-Path -Path $TargetScript
-    $Shortcut.WindowStyle = 1
+    # $Shortcut.WindowStyle = 1
     $Shortcut.IconLocation = "$targetPath,0"
     $Shortcut.Save()
 

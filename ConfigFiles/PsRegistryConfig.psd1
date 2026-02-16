@@ -16,38 +16,42 @@
     }
     RemoteAdminRestApi = @{
         source = "{{REPOSITORY}}\Starter\RemoteAdminRestApi.ps1"
-        target = "{{PROGRAMDATABASEDIR}}\RemoteAdminTools\RemoteAdminRestApi.ps1"
+        target = "{{PROGRAMDATABASEDIR}}\PsRemoteAdminFramework\RestApi.ps1"
     }
-    RemoteAdminTools = @{
-        source = "{{REPOSITORY}}\Starter\RemoteAdminTools.ps1"
-        target = "{{PROGRAMDATABASEDIR}}\RemoteAdminTools\RemoteAdminTools.ps1"
+    PsRemoteAdminFramework = @{
+        source = "{{REPOSITORY}}\Starter\PsRemoteAdminFramework.ps1"
+        target = "{{PROGRAMDATABASEDIR}}\PsRemoteAdminFramework\PsRemoteAdminFramework.ps1"
     }
 <#
     Configs
 #>
+    TaskSchedulerConfig = @{
+        source = "{{REPOSITORY}}\ConfigFiles\TaskSchedulerConfig.psd1"
+        target = "{{PROGRAMDATABASEDIR}}\PsRemoteAdminFramework\TaskSchedulerConfig.psd1"
+    }
     DomainAccountsApiConfig = @{
         source = "{{REPOSITORY}}\ConfigFiles\DomainAccountsApiConfig.json"
-        target = "{{PROGRAMDATABASEDIR}}\DomainAccountsApiConfig.json"
+        target = "{{PROGRAMDATABASEDIR}}\PsRemoteAdminFramework\DomainAccountsApiConfig.json"
     }
     InteractiveSync = @{
         source = "{{REPOSITORY}}\ConfigFiles\InteractiveSync.ps1"
-        target = "{{PROGRAMDATABASEDIR}}\InteractiveSync.ps1"
+        target = "{{PROGRAMDATABASEDIR}}\PsRemoteAdminFramework\InteractiveSync.ps1"
     }
     PlaceholderCallbacks = @{
         source = "{{REPOSITORY}}\ConfigFiles\PlaceholderCallbacks.ps1"
-        target = "{{PROGRAMDATABASEDIR}}\PlaceholderCallbacks.ps1"
+        target = "{{PROGRAMDATABASEDIR}}\PsRemoteAdminFramework\PlaceholderCallbacks.ps1"
     }
     PsRegistryConfig = @{
         source = "{{REPOSITORY}}\ConfigFiles\PsRegistryConfig.psd1"
-        target = "{{PROGRAMDATABASEDIR}}\PsRegistryConfig.psd1"
+        target = "{{PROGRAMDATABASEDIR}}\PsRemoteAdminFramework\PsRegistryConfig.psd1"
     }
     RemoteAdminConfig = @{
         source = "{{REPOSITORY}}\ConfigFiles\RemoteAdminConfig.psd1"
-        target = "{{PROGRAMDATABASEDIR}}\RemoteAdminTools\Config.psd1"
+        target = "{{PROGRAMDATABASEDIR}}\PsRemoteAdminFramework\Config.psd1"
     }
     RemoteAdminData = @{
         source = "{{REPOSITORY}}\ConfigFiles\RemoteAdminNodeData.ps1"
-        target = "{{PROGRAMDATABASEDIR}}\RemoteAdminTools\NodeData.ps1"
+        target = "{{PROGRAMDATABASEDIR}}\PsRemoteAdminFramework\NodeData.ps1"
     }
 <#
     Modules
@@ -95,10 +99,6 @@
     Debugger = @{
         source = "{{REPOSITORY}}\Modules\Debugger\Debugger.psm1"
         target = "{{MODULESBASE}}\Debugger\Debugger.psm1"
-    }
-    DependencyCollector = @{
-        source = "{{REPOSITORY}}\Modules\DependencyCollector\DependencyCollector.psm1"
-        target = "{{MODULESBASE}}\DependencyCollector\DependencyCollector.psm1"
     }
     ExecuteApiRequest = @{
         source = "{{REPOSITORY}}\Modules\ExecuteApiRequest\ExecuteApiRequest.psm1"
@@ -211,6 +211,10 @@
     StationSelector = @{
         source = "{{REPOSITORY}}\Modules\StationSelector\StationSelector.psm1"
         target = "{{MODULESBASE}}\StationSelector\StationSelector.psm1"
+    }
+    TaskScheduler = @{
+        source = "{{REPOSITORY}}\Modules\TaskScheduler\TaskScheduler.psm1"
+        target = "{{MODULESBASE}}\TaskScheduler\TaskScheduler.psm1"
     }
     TerminateFixRestart = @{
         source = "{{REPOSITORY}}\Modules\TerminateFixRestart\TerminateFixRestart.psm1"

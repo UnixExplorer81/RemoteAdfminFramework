@@ -201,9 +201,9 @@ function RemoveSoundsAndConfig {
     Import-Module CredentialInjector -Force
     $Context.Providers.CredentialInjector = CredentialInjector -Context $Context
 
-    $dependencies = @('CredentialManager','NetUseAuthentification','UpdateDeployment')
+    # $dependencies = @('CredentialManager','NetUseAuthentification','UpdateDeployment')
     $CapabilityRegistry = [CapabilityRegistry]::new($Context.Registry)
-    $Context.Capabilities = $CapabilityRegistry.GetCapabilities($dependencies)
+    # $Context.Capabilities = $CapabilityRegistry.GetCapabilities($dependencies)
     $DependencyProvider = DependencyProvider $Context
 
     $ScriptBlock = {

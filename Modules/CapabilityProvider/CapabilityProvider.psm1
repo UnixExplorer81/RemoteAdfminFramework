@@ -1,15 +1,20 @@
 ﻿class CapabilityRegistry {
-    [hashtable]$Registry
 
-    CapabilityRegistry([hashtable]$registry) {
-        $this.Registry = $registry
+    hidden [object]$Registry
+    hidden [hashtable]$Cache = @{}
+
+    CapabilityRegistry([object]$Registry) {
+        $this.Registry = $Registry
     }
 
-    hidden [string] GetSourceCode([string] $key) {
-        if (-not $this.Registry.ContainsKey($key)) {
+    [string] GetSourceCode([string] $key) {
+        if (-not $this.Registry.Keys -contains $key) {
             throw "Unknown capability key '$key'"
         }
-        return Get-Content -Path ($this.Registry[$key].source) -Raw -Encoding UTF8
+        if(-not $this.Cache.Keys -contains $key) {
+            $this.Cache[$key] = Get-Content -Path ($this.Registry[$key].source) -Raw -Encoding UTF8
+        }
+        return $this.Cache[$key]
     }
 
     [hashtable] GetCapabilities([string[]] $keys) {
@@ -21,9 +26,92 @@
     }
 }
 
+function DependencyProvider {
+    param (
+        [Parameter(Mandatory)][object]$Context
+    )
+    $Scriptblock = {
+        param($Context)
+        $CapabilityRegistry = [CapabilityRegistry]::new($Context.Registry)
+        return @{
+            DependencyInjector = {                
+                $scriptBlock = if ($Context.DependencyProvider.ScriptBlock -is [scriptblock]) {
+                    $Context.DependencyProvider.ScriptBlock
+                } elseif ($Context.DependencyProvider.ScriptBlock -is [string]) {
+                    [scriptblock]::Create($Context.DependencyProvider.ScriptBlock)
+                }
+                return & $scriptBlock $Context.DependencyProvider.ArgumentList
+            }
+            ImportModule = {
+                param($Name)
+                try {
+                    if(-not $Context.Keys -contains 'Capabilities') {
+                        $Context.Capabilities = @{}
+                    }
+                    if (-not $Context.Capabilities.Keys -contains $Name) {
+                        $Context.Capabilities.$Name = $CapabilityRegistry.GetSourceCode($Name)
+                    }
+                    $c = $Context.Capabilities.$Name
+                    if ($c -is [string]) {
+                        & ([scriptblock]::Create($c))
+                    } else {
+                        throw "Invalid capability type: $($c.GetType().FullName)"
+                    }
+                } catch {
+                    throw [System.Exception]::new(
+                        "CapabilityProvider->DependencyProvider->ImportModule: Fatal error while importing module '$Name': " ,
+                        $_.Exception
+                    )
+                }
+            }
+            InjectProvider = {
+                param($Name)
+                try {
+                    if(-not $Context.Keys -contains 'Providers') {
+                        $Context.Providers = @{}
+                    }
+                    if (-not $Context.Providers.Keys -contains $Name) {
+                        $c = $CapabilityRegistry.GetSourceCode($Name)
+                        if ($c -is [string]) {
+                            $Context.Providers.$Name = & ([scriptblock]::Create($c)) $Context
+                        } else {
+                            throw "Invalid capability type: $($c.GetType().FullName)"
+                        }
+                    }
+                    $p = $Context.Providers.$Name
+                    if ($p -is [hashtable] -and $p.Keys -contains 'ScriptBlock' -and $p.Keys -contains 'ArgumentList') {
+                        $scriptBlock =
+                            if ($p.ScriptBlock -is [scriptblock]) {
+                                $p.ScriptBlock
+                            } elseif ($p.ScriptBlock -is [string]) {
+                                [scriptblock]::Create($p.ScriptBlock)
+                            }
+                        return & $scriptBlock $p.ArgumentList
+                    } else {
+                        throw "Invalid provider type: $($p.GetType().FullName)"
+                    }
+                } catch {
+                    $innerMsg = if ($_.Exception) { $_.Exception.Message } else { $Error[0].ToString() }
+                    throw [System.Exception]::new(
+                        "CapabilityProvider->DependencyProvider->InjectProvider: Fatal error while invoking provider '$Name': $innerMsg",
+                        $_.Exception
+                    )
+                }
+            }
+        }
+    }.GetNewClosure()
+
+    return @{
+        ScriptBlock = $ScriptBlock
+        ArgumentList = @(@{
+            Context = $Context
+        })
+    }
+}
+
 function DependencyInjector {
     param (
-        [Parameter(Mandatory)][hashtable]$Capabilities
+        [Parameter(Mandatory)][object]$Capabilities
     )
     $cache = @{}
     $ScriptBlock = {
@@ -54,72 +142,73 @@ function DependencyInjector {
 
     return $ScriptBlock
 }
-
-function DependencyProvider {
-    param (
-        [Parameter(Mandatory)][hashtable]$Context
-    )
-    Import-Module Debugger
-    Inspect $Context.Capabilities
-    $Scriptblock = {
-        param($Context)
-        return @{
-            ImportModule = {
-                param($Name, $ArgumentList = @())
-                try {
-                    if (-not $Context.Capabilities.ContainsKey($Name)) {
-                        throw "Capability '$Name' not found"
-                    }
-                    $c = $Context.Capabilities[$Name]
-                    if ($c -is [string]) {
-                        & ([scriptblock]::Create($c)) @($ArgumentList)
-                        return $c
-                    } else {
-                        throw "Invalid capability type: $($c.GetType().Name)"
-                    }
-                } catch {
-                    throw [System.Exception]::new(
-                        "CapabilityProvider->DependencyProvider->ImportModule: Fatal error while importing module '$name': " ,
-                        $_.Exception
-                    )
-                }
-            }
-            InjectProvider = {
-                param($Name)
-                try {
-                    if (-not $Context.Providers.ContainsKey($Name)) {
-                        throw "Capability '$Name' not found"
-                    }
-                    $p = $Context.Providers.$Name
-                    if ($p -is [hashtable] -and $p.ContainsKey('ScriptBlock') -and $p.ContainsKey('ArgumentList')) {
-                        $scriptBlock =
-                            if ($p.ScriptBlock -is [scriptblock]) {
-                                $p.ScriptBlock
-                            } elseif ($p.ScriptBlock -is [string]) {
-                                [scriptblock]::Create($p.ScriptBlock)
-                            }
-                        return & $scriptBlock $p.ArgumentList
-                    } else {
-                        throw "Invalid provider type: $($p.GetType().Name)"
-                    }
-                } catch {
-                    $innerMsg = if ($_.Exception) { $_.Exception.Message } else { $Error[0].ToString() }
-                    throw [System.Exception]::new(
-                        "CapabilityProvider->DependencyProvider->InjectProvider: Fatal error while invoking provider '$name': $innerMsg",
-                        $_.Exception
-                    )
-                }
-            }
-        }
-    }.GetNewClosure()
-
-    return @{
-        ScriptBlock = $ScriptBlock
-        ArgumentList = @(@{
-            Context = $Context
-        })
-    }
-}
+# function DependencyProvider {
+#     param (
+#         [Parameter(Mandatory)][object]$Context
+#     )
+#     $CapabilityRegistry = [CapabilityRegistry]::new($Context.Registry)
+#     return @{
+#         ImportModule = {
+#             param($Name)
+#             try {
+#                 if(-not $Context.Keys -contains 'Capabilities') {
+#                     $Context.Capabilities = @{}
+#                 }
+#                 if (-not $Context.Capabilities.Keys -contains $Name) {
+#                     $Context.Capabilities.$Name = $CapabilityRegistry.GetSourceCode($Name)
+#                 }
+#                 $c = $Context.Capabilities.$Name
+#                 Import-Module Debugger
+#                 Inspect $c
+#                 if ($c -is [string]) {
+#                     & ([scriptblock]::Create($c))
+#                     return $c
+#                 } else {
+#                     throw "Invalid capability type: $($c.GetType().FullName)"
+#                 }
+#             } catch {
+#                 throw [System.Exception]::new(
+#                     "CapabilityProvider->DependencyProvider->ImportModule: Fatal error while importing module '$Name': " ,
+#                     $_.Exception
+#                 )
+#             }
+#         }
+#         InjectProvider = {
+#             param($Name)
+#             try {
+#                 if(-not $Context.Keys -contains 'Providers') {
+#                     $Context.Providers = @{}
+#                 }
+#                 if (-not $Context.Providers.Keys -contains $Name) {
+#                     $c = $CapabilityRegistry.GetSourceCode($Name)
+#                     if ($c -is [string]) {
+#                         $Context.Providers.$Name = & ([scriptblock]::Create($c)) $Context
+#                     } else {
+#                         throw "Invalid capability type: $($c.GetType().FullName)"
+#                     }
+#                 }
+#                 $p = $Context.Providers.$Name
+#                 if ($p -is [hashtable] -and $p.Keys -contains 'ScriptBlock' -and $p.Keys -contains 'ArgumentList') {
+#                     $scriptBlock =
+#                         if ($p.ScriptBlock -is [scriptblock]) {
+#                             $p.ScriptBlock
+#                         } elseif ($p.ScriptBlock -is [string]) {
+#                             [scriptblock]::Create($p.ScriptBlock)
+#                         }
+#                     return & $scriptBlock $p.ArgumentList
+#                 } else {
+#                     throw "Invalid provider type: $($p.GetType().FullName)"
+#                 }
+#             } catch {
+#                 $innerMsg = if ($_.Exception) { $_.Exception.Message } else { $Error[0].ToString() }
+#                 throw [System.Exception]::new(
+#                     "CapabilityProvider->DependencyProvider->InjectProvider: Fatal error while invoking provider '$Name': $innerMsg",
+#                     $_.Exception
+#                 )
+#             }
+#         }
+#     }
+# }
 
 # Export-ModuleMember -TypeName CapabilityRegistry
 # Export-ModuleMember -Function DependencyProvider, DependencyInjector

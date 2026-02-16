@@ -3,14 +3,14 @@ using module ProgressBar
 
 $ProgressCallback = ProgressBar
 
-function InitStationSelectMenu {
+function StationSelector {
     param (
         [Parameter(Mandatory)][object]$Context
     )
     if ($Host.Name -eq 'ConsoleHost') {
-        ShowMenu -Node (GetStationSelectMenu -Context $Context) -Path $Context.Path -Context $Context -DisplayIndex $Context.Config.DisplayIndex
+        MultiDimensionalMenu -Node (GetStationSelectMenu -Context $Context) -Path $Context.Path -Context $Context -DisplayIndex $Context.Config.DisplayIndex
     } else {
-        ExecuteApiRequest -Node (GetStationSelectMenu -Context $Context) -Path $Context.Path -Context $Context
+        ResolveApiRequestPath -Node (GetStationSelectMenu -Context $Context) -Path $Context.Path -Context $Context
     }
 }
 
@@ -21,12 +21,12 @@ function GetStationSelectMenu {
     $CredentialFile = $Context.Config.ClientsCredPath
     $Credential = CredentialManager -Key $Context.Config.CredentialKey -Path $CredentialFile -DefaultUser $Context.Config.DefaultAdmin
     return [ordered]@{
-        "Specific stations" = @(
-            "Manually define specific stations (numbers or hostnames).",
+        "Specific clients" = @(
+            "Manually define specific clients (numbers or hostnames).",
             (SpecificStationsScript -Credential $Credential -Context $Context -ProgressCallback $ProgressCallback)
         )
-        "All stations" = @(
-            "All stations from $($Context.Config.CsvPath).",
+        "All clients" = @(
+            "All clients from $($Context.Config.CsvPath).",
             (AllStationsScript -Credential $Credential -Context $Context -ProgressCallback $ProgressCallback)
         )
     }
