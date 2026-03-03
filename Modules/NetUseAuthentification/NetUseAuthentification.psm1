@@ -1,8 +1,8 @@
 ﻿function NetUseAuthentification {
     param(
-        [switch]$EnableDebugging,
         [Parameter(Mandatory)][string]$UncPath,
-        [Parameter(Mandatory)][System.Management.Automation.PSCredential]$Credential
+        [Parameter(Mandatory)][System.Management.Automation.PSCredential]$Credential,
+        [switch]$EnableDebugging
     )
     $netCred = $Credential.GetNetworkCredential()
     $username = "$($netCred.Domain)\$($netCred.UserName)"

@@ -7,12 +7,12 @@ function RegisterMacAddress {
         $Context.Memory.RegisterMacAddress.Computer -is [object]) {
 
         $Computer = $Context.Memory.RegisterMacAddress.Computer    
-        $netAddress = ($Context.Config.BroadcastAddress -split '\.')[0..2] -join '.'
         if($Computer -is [PSCustomObject]){
             Import-Module ConvertToHashtable
             $Computer = ConvertToHashtable $Computer
         }
         if($Computer.Keys -contains 'ip'){
+            $netAddress = ($Context.Config.BroadcastAddress -split '\.')[0..2] -join '.'
             $ip = @($Computer.ip | Where-Object { $_.StartsWith($netAddress) })[0]
             $Computer.ip = $ip
         }

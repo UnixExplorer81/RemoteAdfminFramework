@@ -1,22 +1,7 @@
 ﻿using module ProxyPlaceholderResolver
-using module CapabilityProvider
 Using Module Debugger
 using module Logger
 
-# API call examples
-<#
-    .\PsRemoteAdminFramework.ps1 -InvokeApi @{
-        Path   = @("GPOs", "Task Scheduler", "Wake All Clients")
-    }
-    .\PsRemoteAdminFramework.ps1 -InvokeApi @{
-        Path   = @("GPOs", "Wake up Clients", "Specific Clients")
-        Memory = @{
-            StationSelector = @{
-                selection = @("PC-001", "PC-002", "PC-003")
-            }
-        }
-    }
-#>
 [CmdletBinding(DefaultParameterSetName = 'Interactive')]
 param(
     [Parameter(Mandatory = $true, ParameterSetName = 'ApiMode', Position = 0)]
@@ -82,45 +67,29 @@ function FallbackLog {
     }
 }
 
-try {
-    $IsApiMode = $PSCmdlet.ParameterSetName -eq 'ApiMode'
-    if ($IsApiMode) {
-        if (-not $InvokeApi.Path -or $InvokeApi.Path.Count -eq 0) {
-            FallbackLog "ApiMode requires 'Path' to be a non-empty string array" -error
-            exit 1
-        }
-        if ($null -ne $InvokeApi.Memory -and $InvokeApi.Memory -isnot [object]) {
-            FallbackLog "InvokeApi.Memory must be a hashtable if provided" -error
-            exit 1
-        }
-        $Memory = if ($null -ne $InvokeApi.Memory) { $InvokeApi.Memory } else { @{} }
-    } else {
-        # try {
-        #     Import-Module ClassLoader -ErrorAction Stop
-        # } catch {
-        #     Invoke-Expression (Get-Content (Join-Path $BootstrapRoot "Modules\ClassLoader\ClassLoader.psm1") -Raw -Encoding UTF8 -ErrorAction Stop)
-        # } finally {
-        #     if(Get-Command ClassLoader -ErrorAction SilentlyContinue){
-        #         $Modules = @(
-        #             "FileAndDirectoryOperations",
-        #             "ProxyPlaceholderResolver",
-        #             "CreatePsStartFileLink",
-        #             "CapabilityProvider"  
-        #             "Debugger",
-        #             "Logger"
-        #         )
-        #         ClassLoader -RootDirectory $BootstrapRoot -Modules $Modules
-        #     }
-        # }
-        if (-not $ExecutedByShortcut) {
-            if(Get-Command CreatePsStartFileLink -ErrorAction Stop) {
-                Import-Module CreatePsStartFileLink
-            }
-            CreatePsStartFileLink -TargetScript $MyInvocation.MyCommand.Definition -PS7
-            Start-Sleep -Seconds 1
-        }
-        $Memory = @{}
+$IsApiMode = $PSCmdlet.ParameterSetName -eq 'ApiMode'
+if ($IsApiMode) {
+    if (-not $InvokeApi.Path -or $InvokeApi.Path.Count -eq 0) {
+        FallbackLog "ApiMode requires 'Path' to be a non-empty string array" -error
+        exit 1
     }
+    if ($null -ne $InvokeApi.Memory -and $InvokeApi.Memory -isnot [object]) {
+        FallbackLog "InvokeApi.Memory must be a hashtable if provided" -error
+        exit 1
+    }
+    $Memory = if ($null -ne $InvokeApi.Memory) { $InvokeApi.Memory } else { @{} }
+} else {
+    if (-not $ExecutedByShortcut) {
+        if(Get-Command CreatePsStartFileLink -ErrorAction Stop) {
+            Import-Module CreatePsStartFileLink
+        }
+        CreatePsStartFileLink -TargetScript $MyInvocation.MyCommand.Definition -PS7
+        Start-Sleep -Seconds 1
+    }
+    $Memory = @{}
+}
+
+try {
     $Context = [pscustomobject]@{}
     $Resolver = [ProxyPlaceholderResolver]::new()
     $Context | Add-Member -NotePropertyName 'Resolver' -NotePropertyValue $Resolver
@@ -130,7 +99,6 @@ try {
     $Resolver.RegisterSource('CONFIG', $CfgPsd)
     $Config = $Resolver.CreateProxy('CONFIG', $Context, @('AsHashtable','GetKeys'))
     $Context | Add-Member -NotePropertyName 'Config' -NotePropertyValue $Config
-    # Start-Sleep -Seconds 1
     $Logger = [Logger]::new(@{
         LogInfo         = $Config.LogProgress
         LogErrors       = $Config.LogErrors
@@ -143,10 +111,11 @@ try {
     $Resolver.RegisterSource('REGISTRY', $RegPsd)
     $Registry = $Resolver.CreateProxy('REGISTRY', $Context, @('AsHashtable','Filter','GetKeys','GetRecords'))
     $Context | Add-Member -NotePropertyName 'Registry' -NotePropertyValue $Registry
-    $DependencyProvider = DependencyProvider $Context
-    $DependencyInjector = & $DependencyProvider.ScriptBlock $DependencyProvider.ArgumentList
-    $Context | Add-Member -NotePropertyName 'DependencyProvider' -NotePropertyValue $DependencyProvider
+    $DiContext = ResolveProxyObjects -Context $Context -Resolve @('Registry')
+    $DependencyInjector = DependencyInjector $DiContext
     $Context | Add-Member -NotePropertyName 'DependencyInjector' -NotePropertyValue $DependencyInjector
+    $DependencyProvider = DependencyProvider $Context
+    $Context | Add-Member -NotePropertyName 'DependencyProvider' -NotePropertyValue $DependencyProvider
     $Context | Add-Member -NotePropertyName 'Memory' -NotePropertyValue $Memory
     $Context.Logger.Info("--- 🖥️ $($env:COMPUTERNAME) - Running as: 👤 $(whoami) ---")
     $Node = & (Join-Path $Config.ProgramData $Config.ProgramNodes)

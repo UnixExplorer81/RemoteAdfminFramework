@@ -4,7 +4,7 @@ class Logger {
 
     [hashtable]$LogFiles = @{}
     [bool]$UseConsole
-    [int]$MaxLogSize
+    [long]$MaxLogSize
 
     # Logger($params) {
     #     if (-not EnsureDirectory $params.LogInfo) { throw "Logger: Failed to create directory: $($params.LogInfo)" }

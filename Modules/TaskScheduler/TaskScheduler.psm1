@@ -15,7 +15,6 @@ function GetTaskSchedulerMenu {
         [Parameter(Mandatory)][object]$Context
     )
 
-    # $Config = & $Context.Registry.TaskSchedulerConfig.target
     $Config = Invoke-Expression (Get-Content $Context.Registry.TaskSchedulerConfig.target -Raw -Encoding UTF8 -ErrorAction Stop)
     $Menu  = [ordered]@{}
 

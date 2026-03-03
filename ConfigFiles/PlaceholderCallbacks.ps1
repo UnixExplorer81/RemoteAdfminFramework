@@ -7,13 +7,27 @@
     }
     MODULESBASE = {
         param($Context)
-        if (-not (Get-Command DetectModulesBasePath -ErrorAction SilentlyContinue)) {
-            Import-Module DetectModulesBasePath -Force
+        switch($PSVersionTable.PSVersion.Major){
+            5 {
+                $GlobalModulePath = $Context.Config.GlobalModulePath.PS5
+                $UserModulePath = $Context.Config.UserModulePath.PS5
+            }
+            7 {
+                $GlobalModulePath = $Context.Config.GlobalModulePath.PS7
+                $UserModulePath = $Context.Config.UserModulePath.PS7
+            }
+            default {
+                $GlobalModulePath = $Context.Config.GlobalModulePath.PS5
+                $UserModulePath = $Context.Config.UserModulePath.PS5
+            }
         }
         try {
-            return DetectModulesBasePath -GlobalModulePath $Context.Config.GlobalModulePath -UserModulePath $Context.Config.UserModulePath
+            $testFile = Join-Path $GlobalModulePath "test_write_access.tmp"
+            Set-Content -Path $testFile -Value "test" -Force -ErrorAction Stop
+            Remove-Item $testFile -Force -ErrorAction Stop
+            return $GlobalModulePath
         } catch {
-            throw "Fatal error in PlaceHoldercallbacks->MODULESBASE: Required module DetectModulesBasePath is not available."
+            return $UserModulePath 
         }
     }
     PROGRAMDATA = {
@@ -25,23 +39,22 @@
         return $Context.Config.ProgramDataBaseDir
     }
     USERPROFILE = {
-        param($Context)
-        if (-not (Get-Command GetUserProfilePath -ErrorAction SilentlyContinue)) {
-            try {
-                Import-Module UserProfileUtilities -Force -ErrorAction Stop
-            } catch {
-                throw "Fatal error in PlaceHolderCallbacks->USERPROFILE: Required module UserProfileUtilities is not available."
-            }
+        try {
+            $Username = (Get-CimInstance -ClassName Win32_ComputerSystem).UserName
+            $shortName = $Username.Split('\')[-1]
+            $sid = ([System.Security.Principal.NTAccount]$shortName).Translate([System.Security.Principal.SecurityIdentifier]).Value
+            $userprofile = Get-CimInstance -ClassName Win32_UserProfile | Where-Object { $_.SID -eq $sid -and $_.Loaded -and -not $_.Special }
+            return $userprofile.LocalPath
+        } catch {
+            throw "Fatal error in PlaceHolderCallbacks->USERPROFILE: $_"
         }
-        return GetUserProfilePath
     }
     REPOSITORY = {
         param($Context)
         $repos = @()
         foreach ($repo in $Context.Config.Repositories) {
             if ($repo -is [string]) {
-                $resolved = $Context.Resolver.ResolveStringPlaceholders($repo, $Context)
-                $repos += $resolved
+                $repos += $Context.Resolver.ResolveStringPlaceholders($repo, $Context)
             } else {
                 $repos += $repo
             }
@@ -55,20 +68,12 @@
         param($Context)
         foreach ($server in $Context.Config.Servers) {
             if (Test-Connection -ComputerName $server -Count 1 -Quiet) {
+                $Context.Config.OfflineMode = $false
                 return $server
             }
         }
-        throw "Fatal error in PlaceHolderCallbacks->SERVER: No reachable server found"
+        $Context.Config.OfflineMode = $true
     }
-    # SERVER = {
-    #     param($Context)
-    #     foreach ($server in $Context.Config.Servers) {
-    #         if (Test-WSMan -ComputerName $server -ErrorAction SilentlyContinue) {
-    #             return $server
-    #         }
-    #     }
-    #     throw "Fatal error in PlaceHolderCallbacks->SERVER: No WinRM-reachable server found"
-    # }
     SERVERS = {
         param($key, $Context)
         if ($null -eq $key -or $key -eq '') { return $Context.Config.Servers }

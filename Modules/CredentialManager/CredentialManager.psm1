@@ -17,10 +17,10 @@
                 $storedUser = $null
                 if ($raw -and $raw.ContainsKey('Username')) { $storedUser = $raw.Username }
                 if (-not $storedUser -and $raw -is [System.Collections.Hashtable] -and $raw.Values) {
-                    $storedUser = $raw['Username']
+                    $storedUser = $raw.Username
                 }
             } catch {
-                $storedUser = if($DefaultUser){$DefaultUser}else{$null}
+                $storedUser = if($DefaultUser){ $DefaultUser } else { $null }
             }
             if ($storedUser) {
                 $msg = "Enter password for user $storedUser."

@@ -64,7 +64,7 @@ function SpecificStationsScript {
             $null -eq $Context.Memory.StationSelector.selection -or 
             $Context.Memory.StationSelector.selection.Count -eq 0) 
         {
-            Write-Host "`nEnter client numbers or hostnames, comma separated (e.g. 21,25,pc-001), optional ranges (25-50,75-100):"
+            Write-Host "`nEnter client numbers or hostnames, comma separated (e.g. 21,25,pc-001), or ranges (25-50,75-100):"
             Write-Host "[Press ESC or ← to cancel]" -ForegroundColor DarkGray
             Write-Host ""
             Write-Host -NoNewline "> "
@@ -86,6 +86,7 @@ function SpecificStationsScript {
 
             $Context.Memory.StationSelector = @{}
             $Context.Memory.StationSelector.selection = $inputValue -split ',' | ForEach-Object {
+                $netAddress = ($Context.Config.BroadcastAddress -split '\.')[0..2] -join '.'
                 $token = $_.Trim()
                 switch -Regex ($token) {
                     # Range: e.g. 5-15
@@ -93,12 +94,12 @@ function SpecificStationsScript {
                         $begin, $end = $token -split '-' | ForEach-Object { [int]$_ }
 
                         $begin..$end | ForEach-Object {
-                            "$($Context.Config.Subnet)$_"
+                            "$netAddress.$_"
                         }
                     }
                     # Single number: e.g. 21
                     '^\d+$' {
-                        "$($Context.Config.Subnet)$token"
+                        "$netAddress.$token"
                     }
                     # Hostname or anything else: e.g. pc-001
                     default {
@@ -114,7 +115,7 @@ function SpecificStationsScript {
             $match = $Computers | Where-Object {
                 $_.hostname -eq $token -or
                 $_.ip -eq $token -or
-                "$($Context.Config.Subnet)$token" -eq $_.ip
+                "$netAddress.$token" -eq $_.ip
             }
             if ($match) {
                 $Clients += $match

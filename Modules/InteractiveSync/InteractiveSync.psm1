@@ -154,7 +154,7 @@ function CopyFile {
             }
         }
         if ($verbose -and $success) {
-            Write-Host "✅ Synced: $Name → $Target" -ForegroundColor Green
+            Write-Host "✅ Success: $Name → $Target" -ForegroundColor Green
         }
     }else{
         $PSCmdlet.ShouldProcess("$Name", "Copy $Source → $Target")

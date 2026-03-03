@@ -3,24 +3,21 @@ function WakeOnLan {
         [Parameter(Mandatory)]
         [object]$Context
     )
-    if(-not $Context.Computer.mac){
-        return @{
-            Success = $false
-            Message = "WakeOnLan: MAC address missing for $($Context.Computer.hostname)"
-        }
-    }
     try {
-        $MagicPacket = buildMagicPackage -MacAddress $Context.Computer.mac
-        if($null -eq $MagicPacket) {
-            throw "WakeOnLan: Invalid MAC address: Required format is XX:XX:XX:XX:XX:XX or XX-XX-XX-XX-XX-XX."
+        if(-not $Context.Computer.mac -or -not $Context.Computer.mac.Trim()){
+            throw "No MAC address specified."
         }
-        $bytesSent = sendMagicPackage -MagicPacket $MagicPacket -BroadcastAddress $Context.Config.BroadcastAddress
+        $MagicPacket = createMagicPacket -MacAddress $Context.Computer.mac
+        if($null -eq $MagicPacket) {
+            throw "Invalid MAC address: Required format is XX:XX:XX:XX:XX:XX or XX-XX-XX-XX-XX-XX."
+        }
+        $bytesSent = sendMagicPacket -MagicPacket $MagicPacket -BroadcastAddress $Context.Config.BroadcastAddress
         if([int]$bytesSent -ne $MagicPacket.Length){
-            throw "WakeOnLan: An unknown error has occurred. Check connection!"
+            throw "An unknown error has occurred. Check connection!"
         }
         return @{
             Success = $true
-            Message = "WakeOnLan: Magic packet sent via $($Context.Config.BroadcastAddress) for $($Context.Computer.hostname) ($MacAddress)."
+            Message = "WakeOnLan: Magic packet sent via $($Context.Config.BroadcastAddress) for $($Context.Computer.hostname) ($($Context.Computer.mac))."
         }
     } catch {
         return @{
@@ -30,7 +27,7 @@ function WakeOnLan {
     }
 }
 
-function buildMagicPackage {
+function createMagicPacket {
     param (
         [Parameter(Mandatory)][string]$MacAddress
     )
@@ -47,7 +44,7 @@ function buildMagicPackage {
     }
 }
 
-function sendMagicPackage {
+function sendMagicPacket {
     param (
         [Parameter(Mandatory)][byte[]]$MagicPacket,
         [string]$BroadcastAddress,

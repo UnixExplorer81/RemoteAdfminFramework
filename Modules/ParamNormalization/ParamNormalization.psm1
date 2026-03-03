@@ -6,6 +6,9 @@
         [hashtable]$RuntimeState
     )
 
+    $Context.DependencyInjector = DependencyInjector $Context
+    $Context.DependencyProvider = DependencyProvider $Context
+
     # Default: Context + Runtime
     $argumentList = @(
         MergeContext -CustomArgs $RuntimeState -DefaultArgs $Context

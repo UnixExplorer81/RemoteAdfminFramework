@@ -3,16 +3,16 @@
     param (
         [Parameter(Mandatory)]
         [object]$Computer,
-        [int]$Type = "TP"
+        [string]$Type
     )
 
     Write-Verbose "Testing accessibilty of $($Computer.hostname)..."
     switch ($Type) {
-        'TP' {
-            TestPath
-        }
         'TC' {
             TestConnection
+        }
+        'TP' {
+            TestPath
         }
         'TW' {
             TestWSMan
@@ -27,15 +27,15 @@
     return $false
 }
 
-function TestPath {
-    if (Test-Path "\\$($Computer.ip)\c$" -ErrorAction SilentlyContinue) {
-        Write-Verbose "→ Accessed via c$ share (SMB)"
-        return $true
-    }
-}
 function TestConnection {
     if (Test-Connection -ComputerName $($Computer.ip) -Count 1 -Quiet -ErrorAction SilentlyContinue) {
         Write-Verbose "→ Accessed $($Computer.hostname) via Ping (ICMP)"
+        return $true
+    }
+}
+function TestPath {
+    if (Test-Path "\\$($Computer.ip)\c$" -ErrorAction SilentlyContinue) {
+        Write-Verbose "→ Accessed via c$ share (SMB)"
         return $true
     }
 }

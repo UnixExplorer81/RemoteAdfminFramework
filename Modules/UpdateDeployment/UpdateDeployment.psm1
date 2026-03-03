@@ -62,14 +62,19 @@ function UpdateDeployment {
     param (
         [Parameter(Mandatory)][object[]]$Jobs,
         [switch]$EnableDebugLogging,
-        [string]$logPath = "C:\Windows\Temp\UpdateDeployment.log",
-        [long]$maxLogSize = 1024KB
+        [string]$LogPath = "C:\Windows\Logs\PowerShell\UpdateDeployment.log",
+        [long]$MaxLogSize = 1024KB
     )
+
+    $logDir = Split-Path $LogPath -Parent
+    if (-not (Test-Path $logDir)) {
+        New-Item -Path $logDir -ItemType Directory -Force | Out-Null
+    }
 
     # Log header
     writeLog @(
-        appendLog "🖥️ $env:COMPUTERNAME - Running as: 👤 $(whoami)" -Level "force"
-        appendLog "────────────────────────────────────────────" -Level "force"
+        appendLog "🖥️ $env:COMPUTERNAME - Running as: 👤 $(whoami)" "force"
+        appendLog "────────────────────────────────────────────" "force"
     )
 
     # Run all jobs simultaniously
@@ -80,7 +85,7 @@ function UpdateDeployment {
             ProcessJob -job $job
         }
     }
-
+    
     # collecting results
     $jobList | ForEach-Object {
         $null = Wait-Job $_
@@ -184,7 +189,7 @@ function planTargets {
     $plannedTargets = @()
     if ($job.Keys -contains 'files') {
         foreach ($relSourcePath in $job.files.Keys) {
-            $relTargetPath = $job.files[$relPath]
+            $relTargetPath = $job.files[$relSourcePath]
             $sourceFile = if($sourceBase) { Join-Path $sourceBase $relSourcePath }else{ $relSourcePath }
             $plannedTarget = if($targetBase) { Join-Path $targetBase $relTargetPath }else{ $relTargetPath }
             if (-not (Test-Path $sourceFile)) {
@@ -475,6 +480,7 @@ function testFileLock {
 
 function appendLog {
     param (
+        [Parameter(Mandatory)]
         [string]$Message,
         [ValidateSet("info", "warn", "error", "force")]
         [string]$Level = "info"
@@ -499,19 +505,19 @@ function writeLog {
             "info"  { if ($EnableDebugLogging) { $write = $true } }
         }
         if ($write) {
-            $entry.Text | Out-File -FilePath $logPath -Encoding UTF8 -Append
+            $entry.Text | Out-File -FilePath $LogPath -Encoding UTF8 -Append
             Write-Host $entry.Text
         }
     }
 }
 
 function truncateLog {   
-    if (Test-Path $logPath) {
-        $logSize = (Get-Item $logPath).Length
-        if ($logSize -gt $maxLogSize) {
+    if (Test-Path $LogPath) {
+        $logSize = (Get-Item $LogPath).Length
+        if ($logSize -gt $MaxLogSize) {
             try {
-                $lines = Get-Content -Path $logPath -Tail 3000
-                $lines | Out-File -FilePath $logPath -Encoding UTF8
+                $lines = Get-Content -Path $LogPath -Tail 3000
+                $lines | Out-File -FilePath $LogPath -Encoding UTF8
                 Write-Host "🧹 Log truncated (size exceeded $([math]::Round($logSize / 1KB)) KB)"
             } catch {
                 Write-Host "⚠️ Failed to truncate oversized log: $($_.Exception.Message)"

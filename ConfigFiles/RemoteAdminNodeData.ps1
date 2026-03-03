@@ -1,12 +1,12 @@
-﻿using module StationSelector
-return [ordered]@{
-    "Sound" = [ordered]@{
+﻿return [ordered]@{
+    "Sound Settings" = [ordered]@{
         "Reset VoiceMeter" = @(
             "Apply this to restore the desired default settings. This will restart VoiceMeter.",
             {
                 param($Context)
                 StationSelector -Context $Context
             }.GetNewClosure()
+            # usw.
         )
         "Reset sound settings" = @(
             "Apply this to set VoiceMeter as default devices.",
@@ -14,12 +14,13 @@ return [ordered]@{
                 param($Context)
                 StationSelector -Context $Context
             }.GetNewClosure()
+            # usw.
         )
     }
 
-    "Soundboard" = [ordered]@{
-        "Restart (if hotkey recognition fails)" = @(
-            "Apply this if the soundboard doesn't react on keys, but on double-clicking presets.",
+    "Soundboard fixes" = [ordered]@{
+        "Restart Soundboard" = @(
+            "Apply this if the soundboard doesn't play on keys press, but on double-clicking recordings.",
             {
                 param($Context)
                 StationSelector -Context $Context
@@ -41,15 +42,7 @@ return [ordered]@{
                     StartRemoteDesktopProcess -Session $Context.Session -Path $Context.Config.DcsbPath
                 }
                 AffectsProgress = $true
-            }, @{
-                Name = "JobComplete"
-                DisplayName = "Soundboard Fix"
-                Description = "Operation completed"
-                Script = {
-                    param($Context)
-                    Write-Host "✅ Done on $($Context.Computer.hostname)"
-                }
-            }  
+            } 
         )
 
         "Reset messed up users config.xml" = @(
@@ -71,7 +64,8 @@ return [ordered]@{
                 DisplayName = "Delete current users Soundboard config"
                 Description = "Deleting the current users inconsistent Soundboard config file"
                 Script = {
-                    DumpMessedUpUserConfig
+                    & $Context.DI.ImportModule 'DcsbFixes'
+                    DumpMessedUpUserConfig -Context $Context
                 }
                 WrappedFunction = $true
                 RemoteExecution = $true
@@ -85,15 +79,7 @@ return [ordered]@{
                     StartRemoteDesktopProcess -Session $Context.Session -Path $Context.Config.DcsbPath
                 }
                 AffectsProgress = $true
-            }, @{
-                Name = "JobComplete"
-                DisplayName = "Soundboard Fix"
-                Description = "Operation completed"
-                Script = {
-                    param($Context)
-                    Write-Host "✅ Done on $($Context.Computer.hostname)"
-                }
-            }  
+            }
         )
 
         "Reset messed up global config.xml" = @(
@@ -125,7 +111,7 @@ return [ordered]@{
                 DisplayName = "Delete current users Soundboard config"
                 Description = "Deleting the current users inconsistent Soundboard config file"
                 Script = {
-                    DumpMessedUpUserConfig
+                    DumpMessedUpUserConfig -Context $Context
                 }
                 WrappedFunction = $true
                 RemoteExecution = $true
@@ -139,19 +125,11 @@ return [ordered]@{
                     StartRemoteDesktopProcess -Session $Context.Session -Path $Context.Config.DcsbPath
                 }
                 AffectsProgress = $true
-            }, @{
-                Name = "JobComplete"
-                DisplayName = "Soundboard Fix"
-                Description = "Operation completed"
-                Script = {
-                    param($Context)
-                    Write-Host "✅ Done on $($Context.Computer.hostname)"
-                }
-            }  
+            } 
         )
 
         "Update soundboard configuration & restart" = @(
-            "Apply this if all other options don't help. This will restart the soundboard.",
+            "Apply this if all other options don't help.",
             {
                 param($Context)
                 StationSelector -Context $Context
@@ -190,7 +168,7 @@ return [ordered]@{
                 DisplayName = "Delete current users Soundboard config"
                 Description = "Deleting the current users inconsistent Soundboard config file"
                 Script = {
-                    DumpMessedUpUserConfig
+                    DumpMessedUpUserConfig -Context $Context
                 }
                 WrappedFunction = $true
                 RemoteExecution = $true
@@ -204,14 +182,6 @@ return [ordered]@{
                     StartRemoteDesktopProcess -Session $Context.Session -Path $Context.Config.DcsbPath
                 }
                 AffectsProgress = $true
-            }, @{
-                Name = "JobComplete"
-                DisplayName = "Soundboard Fix"
-                Description = "Operation completed"
-                Script = {
-                    param($Context)
-                    Write-Host "✅ Done on $($Context.Computer.hostname)"
-                }
             }
         )
 
@@ -231,19 +201,11 @@ return [ordered]@{
                 WrappedFunction = $true
                 RemoteExecution = $true
                 AffectsProgress = $true
-            }, @{
-                Name = "JobComplete"
-                DisplayName = "Soundboard Fix"
-                Description = "Operation completed"
-                Script = {
-                    param($Context)
-                    Write-Host "✅ Done on $($Context.Computer.hostname)"
-                }
             }
         )
 
-        "Remove sounds & configuration" = @(
-            "Removes sounds and configuration files in all user accounts.",
+        "Remove recordings & configuration" = @(
+            "Removes the entire configuration inclusive recordings of all user accounts.",
             {
                 param($Context)
                 StationSelector -Context $Context
@@ -267,43 +229,46 @@ return [ordered]@{
                 WrappedFunction = $true
                 RemoteExecution = $true
                 AffectsProgress = $true
-            }, @{
-                Name = "JobComplete"
-                DisplayName = "Soundboard Cleanup"
-                Description = "Operation completed"
-                Script = {
-                    param($Context)
-                    Write-Host "✅ Done on $($Context.Computer.hostname)"
-                }
             }
         )
     }
 
-    "Browser" = [ordered]@{
-        "Reset browser cache" = @(
+    "Browser tools" = [ordered]@{
+        "Reset chrome bookmarks" = @(
             "Apply this if there are any issues with the dialer which don't occur with all accounts / on all stations.",
             {
                 param($Context)
                 StationSelector -Context $Context
             }.GetNewClosure()
+            # usw.
+        )
+        "Reset chrome cache" = @(
+            "Apply this if there are any issues with the dialer which don't occur with all accounts / on all stations.",
+            {
+                param($Context)
+                StationSelector -Context $Context
+            }.GetNewClosure()
+            # usw.
         )
 
-        "Export browser history" = @(
+        "Export chrome browsing history" = @(
             "This extracts and exports the active users' browsing history of the selected stations.",
             {
                 param($Context)
                 StationSelector -Context $Context
             }.GetNewClosure()
+            # usw.
         )
     }
 
     "Network" = [ordered]@{
-        "Disable & Enable adapter" = @(
+        "Disable & enable network adapter" = @(
             "Apply this if Windows displays offline status although the adapter LEDs are blinking.",
             {
                 param($Context)
                 StationSelector -Context $Context
             }.GetNewClosure()
+            # usw.
         )
 
         "Change gateway priority" = @(
@@ -312,6 +277,7 @@ return [ordered]@{
                 param($Context)
                 StationSelector -Context $Context
             }.GetNewClosure()
+            # usw.
             
         )
 
@@ -321,6 +287,7 @@ return [ordered]@{
                 param($Context)
                 StationSelector -Context $Context
             }.GetNewClosure()
+            # usw.
         )
 
         "Edit static configuration" = @(
@@ -337,33 +304,17 @@ return [ordered]@{
                     ShowNetConfigAssistant -Context $Context
                 }
                 AffectsProgress = $true
-            }, @{
-                Name = "JobComplete"
-                DisplayName = "Client Network Adapter configuration"
-                Description = "Operation completed"
-                Script = {
-                    param($Context)
-                    Write-Host "✅ Done on $($Context.Computer.hostname)"
-                }
             }
         )
     }
     
     "GPOs" = [ordered]@{
-        "Task Scheduler" = @(
+        "Task scheduler" = @(
             "Scheduler to run specific tasks",
             {
                 param($Context)
                 TaskScheduler -Context $Context
-            }.GetNewClosure(), @{
-                Name = "JobComplete"
-                DisplayName = "Task Scheduler execution"
-                Description = "Operation completed"
-                Script = {
-                    param($Context)
-                    Write-Host "✅ Done on $($Context.Computer.hostname)"
-                }
-            }
+            }.GetNewClosure()
         )
 
         "Automatic client registration" = @(
@@ -372,6 +323,7 @@ return [ordered]@{
                 param($Context)
                 StationSelector -Context $Context
             }.GetNewClosure()
+            # usw.
         )
 
         "Enter MAC addresses manually" = @(
@@ -389,8 +341,8 @@ return [ordered]@{
             }.GetNewClosure()
         )
 
-        "Wake up clients" = @(
-            "Wake up clients via wake on LAN / Magic Packages",
+        "Start up clients" = @(
+            "Wake up clients via wake on LAN (Magic Packets)",
             {
                 param($Context)
                 StationSelector -Context $Context
@@ -400,48 +352,80 @@ return [ordered]@{
                 Description = "Sending Magic Packet to wake up $($Context.Computer.hostname)"
                 Script = {
                     param($Context)
-                    # & $Context.DependencyInjector.ImportModule 'WakeOnLan'
                     WakeOnLan -Context $Context
                 }
                 AffectsProgress = $true
                 WrappedFunction = $true
-            }, @{
-                Name = "JobComplete"
-                DisplayName = "Magic packet sent"
-                Description = "Operation completed"
-                Script = {
-                    param($Context)
-                    Write-Host "✅ Done on $($Context.Computer.hostname)"
-                }
             }
         )
-        
-        "Module Deployment" = @(
-            "Module deployment of specific PowerShell modules on remote clients",
+
+        "Reboot clients" = @(
+            "This runs the shutdown command to reboot clients immediatly.",
             {
                 param($Context)
                 StationSelector -Context $Context
             }.GetNewClosure(), @{
-                Name = "RemoteModuleDeployment"
-                DisplayName = "Install/update modules"
-                Description = "Installing/updating modules on remote clients"
-                Script = {
-                    param($Context)
-                    RemoteModuleDeployment -Context $Context -TaskRequires @('CredentialManager','NetUseAuthentification','UpdateDeployment','UserProfileUtilities')
-                }.GetNewClosure()
-                AffectsProgress = $true
+                Name = "ClientShutdown"
+                DisplayName = "Client shut down"
+                Description = "This runs the shutdown command to reboot clients immediatly"
+                Script = { Start-Process -FilePath "shutdown.exe" -ArgumentList "-r -t 0" -NoNewWindow -Wait }
                 RemoteExecution = $true
-                WrappedFunction = $true
-                RenewSession = $true
+                AffectsProgress = $true
             }, @{
                 Name = "JobComplete"
-                DisplayName = "Client Network Adapter configuration"
+                DisplayName = "Client reboot"
                 Description = "Operation completed"
                 Script = {
                     param($Context)
                     Write-Host "✅ Done on $($Context.Computer.hostname)"
                 }
-            }
+            }           
+        )
+
+        "Shut down clients" = @(
+            "This runs the shutdown command to shut down clients immediatly.",
+            {
+                param($Context)
+                StationSelector -Context $Context
+            }.GetNewClosure(), @{
+                Name = "ClientShutdown"
+                DisplayName = "Client shut down"
+                Description = "This runs the shutdown command to shut down clients immediatly."
+                Script = { Start-Process -FilePath "shutdown.exe" -ArgumentList "-s -t 0" -NoNewWindow -Wait }
+                RemoteExecution = $true
+                AffectsProgress = $true
+            }, @{
+                Name = "JobComplete"
+                DisplayName = "Client shut down"
+                Description = "Operation completed"
+                Script = {
+                    param($Context)
+                    Write-Host "✅ Done on $($Context.Computer.hostname)"
+                }
+            }           
+        )
+
+        "Log off user" = @(
+            "This runs the shutdown command to log off the current user.",
+            {
+                param($Context)
+                StationSelector -Context $Context
+            }.GetNewClosure(), @{
+                Name = "ClientShutdown"
+                DisplayName = "Client shut down"
+                Description = "This runs the shutdown command to log off the current user."
+                Script = { Start-Process -FilePath "shutdown.exe" -ArgumentList "-l" -NoNewWindow -Wait }
+                RemoteExecution = $true
+                AffectsProgress = $true
+            }, @{
+                Name = "JobComplete"
+                DisplayName = "Logged off user"
+                Description = "Operation completed"
+                Script = {
+                    param($Context)
+                    Write-Host "✅ Done on $($Context.Computer.hostname)"
+                }
+            }           
         )
 
         "GpUpdate" = @(
@@ -454,13 +438,12 @@ return [ordered]@{
                 DisplayName = "GpUpdate execution"
                 Description = "This runs the GpUpdate command on all selected stations"
                 Script = { Start-Process -FilePath "cmd.exe" -ArgumentList "/c gpupdate" -NoNewWindow -Wait }
-                WrappedFunction = $true
                 RemoteExecution = $true
                 AffectsProgress = $true
             }, @{
                 Name = "JobComplete"
-                DisplayName = "Dcsb Fix"
-                Description = "Operation completed"
+                DisplayName = "GpUpdate"
+                Description = "GpUpdate executed"
                 Script = {
                     param($Context)
                     Write-Host "✅ Done on $($Context.Computer.hostname)"
@@ -478,18 +461,42 @@ return [ordered]@{
                 DisplayName = "GpUpdate /force execution"
                 Description = "This runs the GpUpdate /force command on all selected stations"
                 Script = { Start-Process -FilePath "cmd.exe" -ArgumentList "/c gpupdate /force" -NoNewWindow -Wait }
-                WrappedFunction = $true
                 RemoteExecution = $true
                 AffectsProgress = $true
             }, @{
                 Name = "JobComplete"
-                DisplayName = "Dcsb Fix"
-                Description = "Operation completed"
+                DisplayName = "GpUpdate force"
+                Description = "GpUpdate /force executed"
                 Script = {
                     param($Context)
                     Write-Host "✅ Done on $($Context.Computer.hostname)"
                 }
             }           
+        )
+        
+        "Module deployment" = @(
+            "Physical module deployment of specific PowerShell modules on remote clients",
+            {
+                param($Context)
+                if($null -eq $Context.Memory.RemoteModuleDeployment -and $null -eq $Context.Memory.RemoteModuleDeployment.Installable){
+                    $Context.Memory.RemoteModuleDeployment = @{}
+                    $Installable = Read-Host "Comma separated list of PsRegistryConfig records"
+                    $Context.Memory.RemoteModuleDeployment.Installable = $Installable -split ',' | ForEach-Object { $_.Trim() }
+                }
+                StationSelector -Context $Context
+            }.GetNewClosure(), @{
+                Name = "RemoteModuleDeployment"
+                DisplayName = "Install/update modules"
+                Description = "Installing/updating modules on remote clients"
+                Script = {
+                    param($Context)
+                    RemoteModuleDeployment -Context $Context -Installable $Context.Memory.RemoteModuleDeployment.Installable
+                }.GetNewClosure()
+                AffectsProgress = $true
+                RemoteExecution = $true
+                WrappedFunction = $true
+                RenewSession = $true
+            }
         )
     }
 
@@ -520,21 +527,12 @@ return [ordered]@{
                 Description = "Changes password for the specified user on selected stations"
                 Script = {
                     param($Context)
-                    & $Context.DependencyInjector.ImportModule 'ChangePassword'
                     ChangePassword -Username $Context.Memory.ChangePassword.Username -Password $Context.Memory.ChangePassword.Password
                 }
                 WrappedFunction = $true
                 RemoteExecution = $true
                 AffectsProgress = $true
-            }, @{
-                Name = "JobComplete"
-                DisplayName = "Password change"
-                Description = "Operation completed"
-                Script = {
-                    param($Context)
-                    Write-Host "✅ Done on $($Context.Computer.hostname)"
-                }
-            }           
+            }          
         )
     }
 }

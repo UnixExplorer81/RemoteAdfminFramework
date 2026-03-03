@@ -32,7 +32,7 @@
     $tasks = @()
     for ($j = 2; $j -lt $current.Count; $j++) {
         $e = $current[$j]
-        if ($e -is [System.Collections.Hashtable] -or $e -is [System.Collections.Specialized.OrderedDictionary] -and $e.Keys -contains 'Description' -and $e.Keys -contains 'Script') {
+        if ($e -is [System.Collections.Hashtable] -and $e.ContainsKey('Description') -and $e.ContainsKey('Script')) {
             $tasks += $e
         } else {
             $Context.Logger.Error("ResolveApiRequestPath: Invalid job entry: $e")

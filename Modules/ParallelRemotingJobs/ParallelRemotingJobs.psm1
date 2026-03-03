@@ -10,7 +10,7 @@ function ParallelRemotingJobs {
         [Parameter(Mandatory)][pscredential]$Credential,
         [ScriptBlock]$ProgressCallback
     )
- 
+
     $runningJobs = [System.Collections.ArrayList]::new()
     $jobContext = ResolveProxyObjects -Context $Context -Resolve @('Config','Registry')
 
@@ -21,7 +21,7 @@ function ParallelRemotingJobs {
                 [pscredential]$Credential,
                 [object]$Context
             )
-            if(ComputerActive -Computer $Computer) {
+            if(ComputerActive -Computer $Computer -Type "TS") {
                 $session = New-PSSession -ComputerName $Computer.ip -Credential $Credential
             } else {
                 $session = $null
@@ -86,7 +86,7 @@ function ParallelRemotingJobs {
 
     $counter = 0
     $lock = New-Object object
-    $totalTasks = $Clients.Count * ($Context.Tasks | Where-Object { $_.AffectsProgress -eq $true }).Count
+    $totalTasks = $Clients.Count * @($Context.Tasks | Where-Object { $_.AffectsProgress -eq $true }).Count
     $preMessage = "Total tasks: $totalTasks"
     $Context.Logger.Info($preMessage)
 

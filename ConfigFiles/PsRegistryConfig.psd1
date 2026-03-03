@@ -64,14 +64,6 @@
         source = "{{REPOSITORY}}\Modules\ApiRequest\ApiRequest.psm1"
         target = "{{MODULESBASE}}\ApiRequest\ApiRequest.psm1"
     }
-    CapabilityInjector = @{
-        source = "{{REPOSITORY}}\Modules\CapabilityInjector\CapabilityInjector.psm1"
-        target = "{{MODULESBASE}}\CapabilityInjector\CapabilityInjector.psm1"
-    }
-    CapabilityProvider = @{
-        source = "{{REPOSITORY}}\Modules\CapabilityProvider\CapabilityProvider.psm1"
-        target = "{{MODULESBASE}}\CapabilityProvider\CapabilityProvider.psm1"
-    }
     ChangePassword = @{
         source = "{{REPOSITORY}}\Modules\ChangePassword\ChangePassword.psm1"
         target = "{{MODULESBASE}}\ChangePassword\ChangePassword.psm1"
@@ -84,9 +76,9 @@
         source = "{{REPOSITORY}}\Modules\CreatePsStartFileLink\CreatePsStartFileLink.psm1"
         target = "{{MODULESBASE}}\CreatePsStartFileLink\CreatePsStartFileLink.psm1"
     }
-    CredentialInjector = @{
-        source = "{{REPOSITORY}}\Modules\CredentialInjector\CredentialInjector.psm1"
-        target = "{{MODULESBASE}}\CredentialInjector\CredentialInjector.psm1"
+    CredentialProvider = @{
+        source = "{{REPOSITORY}}\Modules\CredentialProvider\CredentialProvider.psm1"
+        target = "{{MODULESBASE}}\CredentialProvider\CredentialProvider.psm1"
     }
     CredentialManager = @{
         source = "{{REPOSITORY}}\Modules\CredentialManager\CredentialManager.psm1"
@@ -99,6 +91,10 @@
     Debugger = @{
         source = "{{REPOSITORY}}\Modules\Debugger\Debugger.psm1"
         target = "{{MODULESBASE}}\Debugger\Debugger.psm1"
+    }
+    DependencyInjector = @{
+        source = "{{REPOSITORY}}\Modules\DependencyInjector\DependencyInjector.psm1"
+        target = "{{MODULESBASE}}\DependencyInjector\DependencyInjector.psm1"
     }
     ExecuteApiRequest = @{
         source = "{{REPOSITORY}}\Modules\ExecuteApiRequest\ExecuteApiRequest.psm1"
@@ -172,13 +168,9 @@
         source = "{{REPOSITORY}}\Modules\ReadMacAddress\ReadMacAddress.psm1"
         target = "{{MODULESBASE}}\ReadMacAddress\ReadMacAddress.psm1"
     }
-    RedirectAwareApiRequest = @{
-        source = "{{REPOSITORY}}\Modules\RedirectAwareApiRequest\RedirectAwareApiRequest.psm1"
-        target = "{{MODULESBASE}}\RedirectAwareApiRequest\RedirectAwareApiRequest.psm1"
-    }
-    RemoteContextInjector = @{
-        source = "{{REPOSITORY}}\Modules\RemoteContextInjector\RemoteContextInjector.psm1"
-        target = "{{MODULESBASE}}\RemoteContextInjector\RemoteContextInjector.psm1"
+    RemoteContextProvider = @{
+        source = "{{REPOSITORY}}\Modules\RemoteContextProvider\RemoteContextProvider.psm1"
+        target = "{{MODULESBASE}}\RemoteContextProvider\RemoteContextProvider.psm1"
     }
     RemoteDesktopProcess = @{
         source = "{{REPOSITORY}}\Modules\RemoteDesktopProcess\RemoteDesktopProcess.psm1"

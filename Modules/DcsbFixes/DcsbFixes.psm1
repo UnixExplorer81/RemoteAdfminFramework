@@ -1,20 +1,10 @@
-﻿using module CapabilityProvider
-
-function UpdateSoundsAndPresets {
+﻿function UpdateSoundsAndPresets {
     param (
         [Parameter(Mandatory)]
         [object]$Context
     )
    
-    # Inject Credential 
-    Import-Module CredentialInjector -Force
-    $CredentialInjector = CredentialInjector -Context $Context
- 
-    $CapabilityRegistry = [CapabilityRegistry]::new($Context.Registry)
-    $dependencies = @('CredentialManager','NetUseAuthentification','UpdateDeployment')
-    $Capabilities = $CapabilityRegistry.GetCapabilities($dependencies)
-    $Capabilities.CredentialInjector = $CredentialInjector
-    $DependencyInjector = DependencyInjector -Capabilities $Capabilities 
+    $Context.DependencyInjector = DependencyInjector $Context -Providers @('CredentialProvider')
 
     $ScriptBlock = {
         param(
@@ -29,15 +19,16 @@ function UpdateSoundsAndPresets {
             if ($source -notmatch '^\\\\(?<Server>[^\\]+)\\(?<Share>[^\\]+)(\\.*)?$') {
                 throw "Could not detect a server and/or share name in $source"
             }
+            $DI = & ([scriptblock]::Create($Context.DependencyProvider))
             try {
                 # Receive Credential
-                $credential = & $Context.DependencyInjector 'CredentialInjector'
+                $credential = & $DI.GetProvider 'CredentialProvider'
             } catch {
-                throw "Error while receiving credential of CredentialInjector module`: $_"
+                throw "Error while receiving credential of CredentialProvider`: $_"
             }
             try {
                 # Ensure NetUseAuthentification is loaded
-                & $Context.DependencyInjector 'NetUseAuthentification'
+                Invoke-Expression (& $DI.GetContent 'NetUseAuthentification')
                 # SMB authentification via NetUseAuthentification
                 $uncPath = "\\$($matches.Server)\$($matches.Share)"
                 NetUseAuthentification -UncPath $uncPath -Credential $credential -EnableDebugging:$Context.Config.Verbose
@@ -53,12 +44,11 @@ function UpdateSoundsAndPresets {
                     deletes = @(
                         "C:\Users\*\AppData\Local\VirtualStore\ProgramData\DCSB\*.xml"
                     )
-                    # deletes = @("DCSB\*")
                 }
             )
             try {
                 # Ensure UpdateDeployment is loaded
-                & $Context.DependencyInjector 'UpdateDeployment'
+                Invoke-Expression (& $DI.GetContent 'UpdateDeployment')
                 # Trigger deployment
                 UpdateDeployment -Jobs $jobs -EnableDebugLogging:$Context.Config.Verbose
             } catch {
@@ -80,9 +70,7 @@ function UpdateSoundsAndPresets {
     
     return @{
         ScriptBlock = $ScriptBlock
-        ArgumentList = @(@{
-            DependencyInjector = $DependencyInjector
-        })
+        ArgumentList = @(@{})
     }
 }
 
@@ -127,7 +115,7 @@ function ResetGlobalConfig {
                 Message = $message
             }
         }        
-    }.GetNewClosure()
+    }
 
     return @{
         ScriptBlock = $scriptBlock
@@ -139,31 +127,17 @@ function DumpMessedUpUserConfig {
     param (
         [Parameter(Mandatory)][object]$Context
     )
-    try {
-        $dependencies = @('UserProfileUtilities')
-        $CapabilityRegistry = [CapabilityRegistry]::new($Context.Registry)
-        $Context.Capabilities = $CapabilityRegistry.GetCapabilities($dependencies)
-        $DependencyProvider = DependencyProvider $Context
-    } catch {
-        throw "Executing DumpMessedUpUserConfig failed.`: $($_.Exception.Message)"
-    }
+
     $ScriptBlock = {
-        try {
-            $scriptBlock = if ($Context.DependencyProvider.ScriptBlock -is [scriptblock]) {
-                $Context.DependencyProvider.ScriptBlock
-            } elseif ($Context.DependencyProvider.ScriptBlock -is [string]) {
-                [scriptblock]::Create($Context.DependencyProvider.ScriptBlock)
-            }
-            # Executeing DependencyProvider
-            $DependencyProvider = & $scriptBlock $Context.DependencyProvider.ArgumentList
-        } catch {
-            throw "Executing DependencyProvider failed.`: $($_.Exception.Message)"
-        }
+        param([object]$Context)
+
         # Ensure UserProfileUtilities is loaded
-        Invoke-Expression (& $DependencyProvider.InjectProvider 'UserProfileUtilities')
+        $DI = & ([scriptblock]::Create($Context.DependencyProvider))
+        & $DI.ImportModule 'UserProfileUtilities'
+        # Invoke-Expression (& $DI.GetContent 'UserProfileUtilities')
         $profilePath = GetUserProfilePath
         if ($profilePath) {
-            $username = $username.Split('\')[-1]
+            $username = $profilePath.Split('\')[-1]
             $remove = Join-Path $profilePath "AppData\Local\VirtualStore\ProgramData\DCSB\config.xml"
             if (Test-Path $remove) {
                 Remove-Item $remove -Force
@@ -186,9 +160,7 @@ function DumpMessedUpUserConfig {
 
     return @{
         ScriptBlock = $ScriptBlock
-        ArgumentList = @(@{
-            DependencyProvider = $DependencyProvider
-        })
+        ArgumentList = @(@{})
     }
 }
 
@@ -196,20 +168,12 @@ function RemoveSoundsAndConfig {
     param (
         [Parameter(Mandatory)][object]$Context
     )
-    $Context.Providers = @{}
-    # Inject Credential
-    Import-Module CredentialInjector -Force
-    $Context.Providers.CredentialInjector = CredentialInjector -Context $Context
 
-    # $dependencies = @('CredentialManager','NetUseAuthentification','UpdateDeployment')
-    $CapabilityRegistry = [CapabilityRegistry]::new($Context.Registry)
-    # $Context.Capabilities = $CapabilityRegistry.GetCapabilities($dependencies)
-    $DependencyProvider = DependencyProvider $Context
+    # execute CredentialProvider 
+    $Context.DependencyInjector = DependencyInjector $Context -Providers @('CredentialProvider')
 
     $ScriptBlock = {
-        param(
-            [Parameter(Mandatory)][object]$Context
-        )
+        param([object]$Context)
         try{
             # using NetUseAuthentification to ensure UpdateDeployment can access UNC paths of the registry
             $source = $Context.Registry.PsRegistryConfig.source
@@ -219,31 +183,21 @@ function RemoveSoundsAndConfig {
             if ($source -notmatch '^\\\\(?<Server>[^\\]+)\\(?<Share>[^\\]+)(\\.*)?$') {
                 throw "Could not detect a server and/or share name in $source"
             }
-            try {
-                $scriptBlock = if ($Context.DependencyProvider.ScriptBlock -is [scriptblock]) {
-                    $Context.DependencyProvider.ScriptBlock
-                } elseif ($Context.DependencyProvider.ScriptBlock -is [string]) {
-                    [scriptblock]::Create($Context.DependencyProvider.ScriptBlock)
-                }
-                # Executeing DependencyProvider
-                $DependencyProvider = & $scriptBlock $Context.DependencyProvider.ArgumentList
-            } catch {
-                throw "Executing DependencyProvider failed.`: $($_.Exception.Message)"
-            }  
+            $DI = & ([scriptblock]::Create($Context.DependencyProvider))
             try {
                 # Receive Credential
-                $credential = & $DependencyProvider.InjectProvider 'CredentialInjector'
+                $credential = & $DI.GetProvider 'CredentialProvider'
             } catch {
-                throw "Error while receiving credential via CredentialInjector`: $($_.Exception.Message)"
+                throw "Error while receiving credential of CredentialProvider`: $_"
             }
             try {
                 # Ensure NetUseAuthentification is loaded
-                Invoke-Expression (& $DependencyProvider.ImportModule 'NetUseAuthentification')
+                Invoke-Expression (& $DI.GetContent 'NetUseAuthentification')
                 # SMB authentification via NetUseAuthentification
                 $uncPath = "\\$($matches.Server)\$($matches.Share)"
                 NetUseAuthentification -UncPath $uncPath -Credential $credential -EnableDebugging:$Context.Config.Verbose
             } catch {
-                throw "Could not load module NetUseAuthentification module`: $($_.Exception.Message)"
+                throw "Could not load module NetUseAuthentification`: $($_.Exception.Message)"
             }  
             $jobs = @(
                 @{
@@ -255,11 +209,11 @@ function RemoveSoundsAndConfig {
             )
             try {
                 # Ensure UpdateDeployment is loaded
-                Invoke-Expression (& $DependencyProvider.ImportModule 'UpdateDeployment')
+                Invoke-Expression (& $DI.GetContent 'UpdateDeployment')
                 # Trigger deployment
                 UpdateDeployment -Jobs $jobs -EnableDebugLogging:$Context.Config.Verbose
             } catch {
-                throw "Execution of UpdateDeployment module failed`: $($_.Exception.Message)"
+                throw "Execution of UpdateDeployment failed`: $($_.Exception.Message)"
             }
             $message = "Deployment on $env:COMPUTERNAME complete"
             return @{
@@ -277,9 +231,7 @@ function RemoveSoundsAndConfig {
     
     return @{
         ScriptBlock = $ScriptBlock
-        ArgumentList = @(@{
-            DependencyProvider = $DependencyProvider
-        })
+        ArgumentList = @(@{})
     }
 }
 Export-ModuleMember -Function DumpMessedUpUserConfig, RemoveSoundsAndConfig, ResetGlobalConfig, UpdateSoundsAndPresets

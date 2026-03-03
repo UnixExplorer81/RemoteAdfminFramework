@@ -1,19 +1,17 @@
-﻿using module CapabilityProvider
-
-function RemoteModuleDeployment {
+﻿function RemoteModuleDeployment {
     param (
         [Parameter(Mandatory)][object]$Context,
         [Parameter(Mandatory)][string[]]$TaskRequires
     )
 
     # Inject Credential
-    Import-Module CredentialInjector -Force
-    $CredentialInjector = CredentialInjector -Context $Context
+    Import-Module CredentialProvider -Force
+    $CredentialProvider = CredentialProvider -Context $Context
 
     $CapabilityRegistry = [CapabilityRegistry]::new($Context.Registry)
     $dependencies = @('CredentialManager','Debugger','MountPsDrive')
     $Capabilities = $CapabilityRegistry.GetScriptBlocks($dependencies)
-    $Capabilities.CredentialInjector = $CredentialInjector
+    $Capabilities.CredentialProvider = $CredentialProvider
     $CapabilityInjector = CapabilityInjector -Capabilities $Capabilities 
 
     $ScriptBlock = {
@@ -29,9 +27,9 @@ function RemoteModuleDeployment {
                 $uncPath = "\\$($matches.Server)\$($matches.Share)"
                 try {
                     # Receive Credential
-                    $credential = & $Context.CapabilityInjector 'CredentialInjector'
+                    $credential = & $Context.CapabilityInjector 'CredentialProvider'
                 } catch {
-                    throw "Error while receiving credential of CredentialInjector module`: $_"
+                    throw "Error while receiving credential of CredentialProvider module`: $_"
                 }
                 $null = [MountPsDrive]::new(@{
                     UNCPath = $uncPath

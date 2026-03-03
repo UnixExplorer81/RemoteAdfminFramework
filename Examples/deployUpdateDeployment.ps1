@@ -1,22 +1,15 @@
 ﻿param(
     [bool]$EnableDebugLogging = $true,
-    [string]$LogPath = "C:\Windows\Logs\PowerShell\UpdateDeployment.log",
-    [string]$userModulePath = "$env:USERPROFILE\Documents\WindowsPowerShell\Modules",
-    [string]$globalModulePath = "C:\Program Files\WindowsPowerShell\Modules",
+    [string]$logPath = "C:\Windows\Temp\UpdateDeployment.log",
     [hashtable]$UpdateDeployment = @{
         source = "\\topcall.inc\shares\PowerShell_Framework$\Modules\UpdateDeployment\UpdateDeployment.psm1"
-        target = "$globalModulePath\UpdateDeployment\UpdateDeployment.psm1"
+        target = "C:\Program Files\WindowsPowerShell\Modules\UpdateDeployment\UpdateDeployment.psm1"
     }
 )
 
 if (-not (Test-Path $UpdateDeployment.source)) {
     WriteLog "❌ Source module not found: $($UpdateDeployment.source)" -error
     exit 2
-}
-
-$logDir = Split-Path $LogPath -Parent
-if (-not (Test-Path $logDir)) {
-    New-Item -Path $logDir -ItemType Directory -Force | Out-Null
 }
 
 function WriteLog($msg, [switch]$warning, [switch]$error, [switch]$force) {
@@ -45,8 +38,10 @@ function EnsureDirectory([string]$target){
     }
 }
 
+$userModulePath = Join-Path $env:USERPROFILE "Documents\WindowsPowerShell\Modules"
+$globalModulePath = "C:\Windows\System32\WindowsPowerShell\v1.0\Modules"
+$testFile = Join-Path $globalModulePath "test_write_access.tmp"
 try {
-    $testFile = Join-Path $globalModulePath "test_write_access.tmp"
     Set-Content -Path $testFile -Value "test" -Force -ErrorAction Stop
     Remove-Item $testFile -Force -ErrorAction Stop
 } catch {

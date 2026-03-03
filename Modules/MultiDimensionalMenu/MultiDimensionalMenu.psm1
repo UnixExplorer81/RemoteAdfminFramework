@@ -20,10 +20,12 @@
 
     do {
         Clear-Host
-        Write-Host ""
         Write-Host ("$($MenuName): " + ($Path -join " > ")) -ForegroundColor $Context.Config.Coloring.Path
         Write-Host ""
-
+        if($Context.Config.OfflineMode -eq $true){
+            Write-Host "All repositories are offline." -ForegroundColor Red
+            Write-Host ""
+        }
         for ($i = 0; $i -lt $items.Count; $i++) {
             $entry = $Node[$items[$i]]
             $label = if($DisplayIndex){ "$($i+1). $($items[$i])" } else { $items[$i] }
@@ -51,9 +53,12 @@
                     MultiDimensionalMenu -Node $choice -Context $Context -Path ($Path + $label) -DisplayIndex $DisplayIndex
                 } elseif ($choice -is [object[]]) {
                     Clear-Host
-                    Write-Host ""
                     Write-Host ("$($MenuName): " + (($Path + $label) -join " > ")) -ForegroundColor $Context.Config.Coloring.Path
                     Write-Host ""
+                    if($Context.Config.OfflineMode -eq $true){
+                        Write-Host "All repositories are offline." -ForegroundColor Red
+                        Write-Host ""
+                    }
 
                     $description = $choice[0]
                     $entryPoint = $choice[1]
@@ -61,13 +66,14 @@
 
                     for ($j = 2; $j -lt $choice.Count; $j++) {
                         $e = $choice[$j]
-                        if ($e -is [System.Collections.Hashtable] -or $e -is [System.Collections.Specialized.OrderedDictionary] -and $e.Keys -contains 'Description' -and $e.Keys -contains 'Script') {
+                        if ($e -is [System.Collections.Hashtable] -and $e.ContainsKey('Description') -and $e.ContainsKey('Script')) {
                             $tasks += $e
                         } else {
                             Write-Warning "❌ Invalid job entry: $e"
                             Pause
                         }
                     }
+
                     Write-Host "ℹ️ $description" -ForegroundColor $Context.Config.Coloring.Description
 
                     if ($entryPoint -is [ScriptBlock]) {
