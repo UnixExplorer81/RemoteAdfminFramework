@@ -3,7 +3,7 @@
         [Parameter(Mandatory)][object]$Context
     )
 
-    $Context.DependencyInjector = DependencyInjector $Context -Modules @('ProxyPlaceholderResolver')
+    $Context.DependencyInjector = DependencyInjector $Context -Modules @('ProxyResolver')
 
     $ScriptBlock = {
         param (
@@ -11,19 +11,16 @@
         )
         try{
             $DI = & ([scriptblock]::Create($Context.DependencyProvider))
-            Invoke-Expression (& $DI.GetContent 'ProxyPlaceholderResolver')
+            Invoke-Expression (& $DI.GetContent 'ProxyResolver')
             $RemoteCtx = [pscustomobject]@{}
-            $Resolver = [ProxyPlaceholderResolver]::new()
+            $Resolver = ProxyResolver $RemoteCtx
             $RemoteCtx | Add-Member -NotePropertyName 'Resolver' -NotePropertyValue $Resolver
-            $callbacks = & $Context.Registry.PlaceholderCallbacks.source
-            $Resolver.RegisterCallbacks($callbacks)
-            $CfgPsd = Import-PowerShellDataFile $Context.Registry.RemoteAdminConfig.source
-            $Resolver.RegisterSource('CONFIG', $CfgPsd)
-            $Config = $Resolver.CreateProxy('CONFIG', $RemoteCtx, @('AsHashtable','GetKeys'))
+            $Resolver.RegisterCallbacks((& $Context.Registry.PlaceholderCallbacks.source))
+            $Resolver.RegisterSource('CONFIG', (Import-PowerShellDataFile $Context.Registry.RemoteAdminConfig.source))
+            $Config = $Resolver.CreateProxy('CONFIG', @('AsHashtable','GetKeys'))
             $RemoteCtx | Add-Member -NotePropertyName 'Config' -NotePropertyValue $Config
-            $RegPsd = Import-PowerShellDataFile $Context.Registry.PsRegistryConfig.source
-            $Resolver.RegisterSource('REGISTRY', $RegPsd)
-            $Registry = $Resolver.CreateProxy('REGISTRY', $RemoteCtx, @('AsHashtable','Filter','GetKeys','GetRecords'))
+            $Resolver.RegisterSource('REGISTRY', (Import-PowerShellDataFile $Context.Registry.PsRegistryConfig.source))
+            $Registry = $Resolver.CreateProxy('REGISTRY', @('AsHashtable','Filter','GetKeys','GetRecords'))
             $RemoteCtx | Add-Member -NotePropertyName 'Registry' -NotePropertyValue $Registry
             return $RemoteCtx
         } catch {

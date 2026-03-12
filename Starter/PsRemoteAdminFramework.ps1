@@ -1,59 +1,27 @@
-﻿using module ProxyPlaceholderResolver
-Using Module Debugger
-using module Logger
-
-[CmdletBinding(DefaultParameterSetName = 'Interactive')]
+﻿[CmdletBinding(DefaultParameterSetName = 'Interactive')]
 param(
     [Parameter(Mandatory = $true, ParameterSetName = 'ApiMode', Position = 0)]
     [object]$InvokeApi,
 
-    [Parameter(ParameterSetName = 'Interactive')]
-    [switch]$ExecutedByShortcut,
-    [switch]$SkipUpdateCheck,
-    [bool]$EnableDebugLogging = $true,
+    [switch]$LinkExecuted,
+    [switch]$VolatileDI,
 
     [string]$BootstrapRoot = "\\topcall.inc\shares\PowerShell_Framework$",
     [string]$ProgramDataBaseDir = "C:\ProgramData\PowerShell",
-    [string]$ProgramData = "$ProgramDataBaseDir\PsRemoteAdminFramework",
-    [string]$LogPath = "$ProgramData\Progress.log"
+    [string]$ProgramData = (Join-Path $ProgramDataBaseDir "PsRemoteAdminFramework"),
+    [string]$ConfigPath = (Join-Path $ProgramData "Config.psd1"),
+    [string]$LogPath = (Join-Path $ProgramData "Progress.log"),
+
+    [bool]$EnableDebugLogging = $true
 )
 
-$script:ApiPath = $PSCommandPath
-
-# Essencial callbacks to resolve PsRegistryConfig
-$callbacks = @{
-    'REPOSITORY' = {
-        $BootstrapRoot
-    }
-    'PROGRAMDATABASEDIR' = {
-        $ProgramDataBaseDir
-    }
-    'MODULESBASE' = {
-        $globalPath = "C:\Program Files\PowerShell\Modules"
-        $userPath   = Join-Path $env:USERPROFILE "Documents\PowerShell\Modules"
-
-        if (Test-Path $globalPath) {
-            try {
-                $testFile = Join-Path $globalPath ".test"
-                "test" | Out-File $testFile -Force -ErrorAction Stop
-                Remove-Item $testFile -Force -ErrorAction Stop
-                return $globalPath
-            } catch {
-                return $userPath
-            }
-        } else {
-            return $userPath
-        }
-    }
-}
-
 function FallbackLog {
-    param($msg, [switch]$warning, [switch]$error, [switch]$force)
-    $force = $error -or $force
+    param($msg, [switch]$w, [switch]$e, [switch]$f)
+    $force = $e -or $f
     if (-not $EnableDebugLogging -and -not $force) { return }
     if ($null -ne $Logger) {
-        if ($error) { $Logger.Error($msg)  }
-        elseif ($warning) { $Logger.Warn($msg)  }
+        if ($e) { $Logger.Error($msg)  }
+        elseif ($w) { $Logger.Warn($msg)  }
         else { $Logger.Info($msg)  }                       
     } else {
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -61,136 +29,196 @@ function FallbackLog {
         $line | Out-File -FilePath $LogPath -Encoding UTF8 -Append -Force
     }
     if($EnableDebugLogging){
-        if ($error) { Write-Error $msg }
-        elseif ($warning) { Write-Warning $msg }
+        if ($e) { Write-Error $msg }
+        elseif ($w) { Write-Warning $msg }
         else { Write-Host $msg }
     }
 }
 
-$IsApiMode = $PSCmdlet.ParameterSetName -eq 'ApiMode'
-if ($IsApiMode) {
-    if (-not $InvokeApi.Path -or $InvokeApi.Path.Count -eq 0) {
-        FallbackLog "ApiMode requires 'Path' to be a non-empty string array" -error
-        exit 1
-    }
-    if ($null -ne $InvokeApi.Memory -and $InvokeApi.Memory -isnot [object]) {
-        FallbackLog "InvokeApi.Memory must be a hashtable if provided" -error
-        exit 1
-    }
-    $Memory = if ($null -ne $InvokeApi.Memory) { $InvokeApi.Memory } else { @{} }
-} else {
-    if (-not $ExecutedByShortcut) {
-        if(Get-Command CreatePsStartFileLink -ErrorAction Stop) {
-            Import-Module CreatePsStartFileLink
-        }
-        CreatePsStartFileLink -TargetScript $MyInvocation.MyCommand.Definition -PS7
-        Start-Sleep -Seconds 1
-    }
-    $Memory = @{}
-}
-
+$script:ApiPath = $PSCommandPath
+$IsApiMode      = $PSCmdlet.ParameterSetName -eq 'ApiMode'
 try {
+    if ($IsApiMode) {
+        if (-not $InvokeApi.Path -or $InvokeApi.Path.Count -eq 0) {
+            FallbackLog "ApiMode requires 'Path' to be a non-empty string array" -e
+            exit 1
+        }
+        if ($null -ne $InvokeApi.Memory -and $InvokeApi.Memory -isnot [object]) {
+            FallbackLog "InvokeApi.Memory must be a hashtable if provided" -e
+            exit 1
+        }
+        $Memory = if ($null -ne $InvokeApi.Memory) { $InvokeApi.Memory } else { @{} }
+    } else {
+        $Memory = @{}
+    }
     $Context = [pscustomobject]@{}
-    $Resolver = [ProxyPlaceholderResolver]::new()
+    $Resolver = ProxyResolver $Context
     $Context | Add-Member -NotePropertyName 'Resolver' -NotePropertyValue $Resolver
-    $callbacks = & (Join-Path $ProgramData 'PlaceholderCallbacks.ps1')
-    $Resolver.RegisterCallbacks($callbacks)
-    $CfgPsd = Import-PowerShellDataFile (Join-Path $ProgramData "Config.psd1")
-    $Resolver.RegisterSource('CONFIG', $CfgPsd)
-    $Config = $Resolver.CreateProxy('CONFIG', $Context, @('AsHashtable','GetKeys'))
+    $ConfigPsd = Import-PowerShellDataFile $ConfigPath
+    $Resolver.RegisterCallbacks((& (Join-Path $ProgramData $ConfigPsd.PsCallbacks)))
+    $Resolver.RegisterSource('CONFIG', $ConfigPsd)
+    $Config = $Resolver.CreateProxy('CONFIG', @('AsHashtable','GetKeys'))
+    if($VolatileDI){ $Config.VolatileDI = $true }
     $Context | Add-Member -NotePropertyName 'Config' -NotePropertyValue $Config
-    $Logger = [Logger]::new(@{
+    $Logger = Logger @{
         LogInfo         = $Config.LogProgress
         LogErrors       = $Config.LogErrors
         UseConsole      = if ($IsApiMode) { $true } else { $false }
         # CatchOutputs    = if ($IsApiMode) { $false } else { $true }
         CatchOutputs    = $false
-    })
+    }
+    $Logger.Info("--- 🖥️ $($env:COMPUTERNAME) - Running as: 👤 $(whoami) ---")
     $Context | Add-Member -NotePropertyName 'Logger' -NotePropertyValue $Logger -Force
-    $RegPsd = Import-PowerShellDataFile $Config.PsRegistryConfig.target
-    $Resolver.RegisterSource('REGISTRY', $RegPsd)
-    $Registry = $Resolver.CreateProxy('REGISTRY', $Context, @('AsHashtable','Filter','GetKeys','GetRecords'))
+    $Resolver.RegisterSource('REGISTRY', (Import-PowerShellDataFile $Config.PsRegistryConfig.target))
+    $Registry = $Resolver.CreateProxy('REGISTRY', @('AsHashtable','Filter','GetKeys','GetRecords'))
     $Context | Add-Member -NotePropertyName 'Registry' -NotePropertyValue $Registry
-    $DiContext = ResolveProxyObjects -Context $Context -Resolve @('Registry')
-    $DependencyInjector = DependencyInjector $DiContext
-    $Context | Add-Member -NotePropertyName 'DependencyInjector' -NotePropertyValue $DependencyInjector
-    $DependencyProvider = DependencyProvider $Context
-    $Context | Add-Member -NotePropertyName 'DependencyProvider' -NotePropertyValue $DependencyProvider
+    $Context | Add-Member -NotePropertyName 'DependencyInjector' -NotePropertyValue (DependencyInjector ($Resolver.ResolveProxyObjects(@('Registry'))))
+    $Context | Add-Member -NotePropertyName 'DependencyProvider' -NotePropertyValue (DependencyProvider $Context)
+    $Context | Add-Member -NotePropertyName 'DI' -NotePropertyValue (& $Context.DependencyProvider)
+
     $Context | Add-Member -NotePropertyName 'Memory' -NotePropertyValue $Memory
-    $Context.Logger.Info("--- 🖥️ $($env:COMPUTERNAME) - Running as: 👤 $(whoami) ---")
-    $Node = & (Join-Path $Config.ProgramData $Config.ProgramNodes)
+    $Node = & $Registry.RemoteAdminData.target # <--- menuestruktur, wenn man einen menuepunkt auswaehlt, ist $context bereits komplett!
     if ($IsApiMode) {
         ResolveApiRequestPath -Node $Node -Path $InvokeApi.Path -Context $Context
     } else {
         MultiDimensionalMenu -Node $Node -Context $Context -MenuName $Config.MenuName -DisplayIndex $Config.DisplayIndex
     }
 } catch {
-    $_.Exception.Message
-    pause
-function updateBanner {
-    return @"
+    
+    if($null -eq $Config -or $Config.Verbose){
+        $_.Exception.Message
+        pause        
+    }
 
-╔══════════════════════════════════════════════════════════════╗
-║                                                              ║
-║       Remote Admin Tools are not yet installed / uptodate    ║
-║      Remote Admin Framework installation / update started.   ║
-║                                                              ║
-╚══════════════════════════════════════════════════════════════╝
+    function updateBanner {
+        return @"
 
-"@
-}
-
-function completeBanner {
-    return @"
-
-╔══════════════════════════════════════════════════════════════╗
-║                                                              ║
-║     Remote Admin Framework installation / update complete    ║
-║                                                              ║
-╚══════════════════════════════════════════════════════════════╝
+    ╔══════════════════════════════════════════════════════════════╗
+    ║                                                              ║
+    ║       Remote Admin Tools are not yet installed / uptodate    ║
+    ║      Remote Admin Framework installation / update started.   ║
+    ║                                                              ║
+    ╚══════════════════════════════════════════════════════════════╝
 
 "@
-}
-function offlineBanner {
-    return @"
+    }
 
-╔══════════════════════════════════════════════════════════════╗
-║                                                              ║
-║           Remote Admin Tools are not yet installed           ║
-║          and the repositoy is currently unavailable.         ║
-║    Installation cannot proceed. Please contact IT support.   ║
-║                                                              ║
-╚══════════════════════════════════════════════════════════════╝
+    function completeBanner {
+        return @"
+
+    ╔══════════════════════════════════════════════════════════════╗
+    ║                                                              ║
+    ║     Remote Admin Framework installation / update complete    ║
+    ║                                                              ║
+    ╚══════════════════════════════════════════════════════════════╝
 
 "@
-}
+    }
+    function offlineBanner {
+        return @"
+
+    ╔══════════════════════════════════════════════════════════════╗
+    ║                                                              ║
+    ║           Remote Admin Tools are not yet installed           ║
+    ║          and the repositoy is currently unavailable.         ║
+    ║    Installation cannot proceed. Please contact IT support.   ║
+    ║                                                              ║
+    ╚══════════════════════════════════════════════════════════════╝
+
+"@
+    }
     # ──────────────────────────────────────────────────────────────
     # Bootstraping/Fixing
     # ──────────────────────────────────────────────────────────────
-
+   
     $statusMessages = @{
-        offline = $(
+        offline = @(
             "Fatal error while main program initialization`:",
             $_.Exception.Message,
             "Bootstrap repository not available: $BootstrapRoot"
         )
-        beginning = "Beginning installation"
+        checkingInstallation = "Checking your Installation..."
         installing = "Installation in progress..."
         updating = "Update in progress..."
-        loadedRegistry = "PsRegistryConfig loaded from repository"
-        resolvedRegistry = "PsRegistryConfig resolved"
-        convertedRegistry = "Content of PsRegistryConfig converted to hashtable"
-        loadedResolver = "ProxyPlaceholderResolver loaded from repository"
-        registeredResolver = "ProxyPlaceholderResolver registered in Context"
-        loadedCallbacks = "PlaceholderCallbacks loaded from repository"
-        loadedConfig = "RemoteAdminConfig loaded from repository"
-        registeredConfig = "RemoteAdminConfig registered in Context"
-        registeredRegisty = "PsRegistryConfig registered in ProxyPlaceholderResolver and Context"
-        determiningDependencies = "Determining dependencies..."
-        completedUpdate = "UpdateDeployment complete"
-        processCompleted = "Completed"
-        restarting = "Restarting application"
+        importRegisty = "Importing PowerShell Registry"
+        importedRegistry = "PowerShell Registry imported from repository"
+        resolveRegistry = "Resolving PowerShell Registry"
+        resolvedRegistry = "PowerShell Registry resolved"
+        evaluateRegistry = "Evaluating PowerShell Registry"
+        evaluatedRegistry = "PowerShell Registry evaluated"
+        importDependencyInjector = "Importing dependency injector"
+        importedDependencyInjector = "Dependency Injector imported"
+        importResolver = "Importing Proxy Resolver"
+        importedResolver = "Proxy Resolver imported from repository"
+        registerResolverCB = "Registering Proxy Resolver Callbacks"
+        registeredResolverCB = "Proxy Resolver registered Callbacks"
+        importConfig = "Importing general configuration"
+        importedConfig = "General configuration imported from repository"
+        registerConfig = "Registering general configuration"
+        registeredConfig = "General configuration registered in Context"
+        registerRegistyPR = "Registering PowerShell Registry in ProxyResolver"
+        registeredRegistyPR = "PowerShell Registry registered in ProxyResolver"
+        registerRegisty = "Register PowerShell registry"
+        registeredRegisty = "PowerShell registry registered in Context"
+        importApiExecuteable = "Importing API executeable"
+        importedApiExecuteable = "API executeable imported"
+        importRestApiExecuteable = "Importing REST API executeable"
+        importedRestApiExecuteable = "REST API executeable imported"
+        importRestApiWrapper = "Importing REST API Wrapper"
+        importedRestApiWrapper = "REST API Wrapper imported"
+        createStartFileLinks = "Creating start file links"
+        createdStartFileLinks = "Start file links created"
+        importApiRequestPathResolver = "Importing API request resolver"
+        importedApiRequestPathResolver = "API request resolver imported"
+        importMultiDimensionalMenu = "Importing MultiDimensionalMenu"
+        importedMultiDimensionalMenu = "MultiDimensionalMenu imported"
+        importRemoteAdminData = "Importing program menu structure"
+        importedRemoteAdminData = "Program menu structure imported"
+        importProgressBar = "Importing ProgressBar"
+        importedProgressBar = "ProgressBar imported"
+        importCredentialManager = "Importing CredentialManager"
+        importedCredentialManager = "CredentialManager imported"
+        importComputerActive = "Importing ComputerActive"
+        importedComputerActive = "ComputerActive imported"
+        importParamNormalizer = "Importing ParamNormalizer"
+        importedParamNormalizer = "ParamNormalizer imported"
+        importParallelRemotingJobs = "Importing ParallelRemoting"
+        importedParallelRemotingJobs = "ParallelRemoting imported"
+        importStationSelector = "Importing StationSelector"
+        importedStationSelector = "StationSelector imported"
+        importLogger = "Importing Logger"
+        importedLogger = "Logger imported"
         terminating = "Remote Admin Framework terminated"
+    }
+
+    # Essencial callbacks to resolve PsRegistryConfig
+    $callbacks = @{
+        'REPOSITORY' = {
+            $BootstrapRoot
+        }
+        'PROGRAMDATABASEDIR' = {
+            $ProgramDataBaseDir
+        }
+        'MODULESBASE' = {
+            $GlobalModulePath = @{
+                PS5 = "C:\Program Files\WindowsPowerShell\Modules"
+                PS7 = "C:\Program Files\PowerShell\Modules"
+            }
+            $globalPath = if($PSVersionTable.PSVersion.Major -eq 7) { $GlobalModulePath.PS7 } else { $GlobalModulePath.PS5 }
+            $userPath   = Join-Path $env:USERPROFILE "Documents\PowerShell\Modules"
+            if (Test-Path $globalPath) {
+                try {
+                    $testFile = Join-Path $globalPath ".test"
+                    "test" | Out-File $testFile -Force -ErrorAction Stop
+                    Remove-Item $testFile -Force -ErrorAction Stop
+                    return $globalPath
+                } catch {
+                    return $userPath
+                }
+            } else {
+                return $userPath
+            }
+        }
     }
 
     $ProgressBar = {
@@ -201,7 +229,6 @@ function offlineBanner {
         )
         if ($Host.Name -ne 'ConsoleHost') { return }
         if($Percent -le 100){
-            Start-Sleep -MilliSeconds 250
             Write-Progress -Activity $Activity -Status $Status -PercentComplete $Percent
         }else{
             Start-Sleep -Seconds 1
@@ -209,8 +236,8 @@ function offlineBanner {
         }        
     }
 
-    $totalSteps = 11
-    $currentStep = 0
+    $totalSteps = if($LinkExecuted) {23} else {24}
+    $currentStep = 1
     function calcPercentages {
         $percent = $global:currentStep / $totalSteps * 100
         $global:currentStep++
@@ -221,109 +248,186 @@ function offlineBanner {
     if (-not (Test-Path $BootstrapRoot)) {
         Clear-Host
         offlineBanner
-        FallbackLog $statusMessages.offline[0] -Force
-        FallbackLog $statusMessages.offline[1] -Force
-        FallbackLog $statusMessages.offline[2] -error
+        FallbackLog $statusMessages.offline[0] -f
+        FallbackLog $statusMessages.offline[1] -f
+        FallbackLog $statusMessages.offline[2] -e
         if ($Host.Name -eq 'ConsoleHost') { Pause }
         exit 1
     } else {
         Clear-Host
         updateBanner
-        & $ProgressBar $statusMessages.beginning $statusMessages.updating (calcPercentages)
-        FallbackLog $statusMessages.updating -Force
+        FallbackLog $statusMessages.checkingInstallation -f
     }
 
-    # Loading PsRegistryConfig
-    $RegPsdSource = Join-Path $BootstrapRoot "ConfigFiles\PsRegistryConfig.psd1"
-    $regPsdContent = Get-Content $RegPsdSource -Raw
-    & $ProgressBar "Step $currentStep" $statusMessages.loadedRegistry (calcPercentages)
-    FallbackLog $statusMessages.loadedRegistry -Force
+    # Import PsRegistryConfig
+    & $ProgressBar "Step $currentStep" $statusMessages.importRegisty (calcPercentages)
+    $regPsdSource = Join-Path $BootstrapRoot "ConfigFiles\PsRegistryConfig.psd1"
+    $regPsdContent = Get-Content $regPsdSource -Raw
+    FallbackLog $statusMessages.importedRegistry -f
 
-    # Resolve hardcoded Callbacks (Search & Replace)
+    # Resolve essencial hardcoded Callbacks (Search & Replace)
+    & $ProgressBar "Step $currentStep" $statusMessages.resolveRegistry (calcPercentages)
     foreach ($key in $callbacks.Keys) {
         $placeholder = "{{$key}}"
         $value = $callbacks[$key].Invoke()
         $regPsdContent = $regPsdContent -replace [regex]::Escape($placeholder), $value
     }
-    & $ProgressBar "Step $currentStep" $statusMessages.resolvedRegistry (calcPercentages)
-    FallbackLog $statusMessages.resolvedRegistry -Force
+    FallbackLog $statusMessages.resolvedRegistry -f
 
-    # Loading PsRegistryConfig as Hashtable
-    $RegPsd = [scriptblock]::Create($regPsdContent).InvokeReturnAsIs()
-    & $ProgressBar "Step $currentStep" $statusMessages.convertedRegistry (calcPercentages)
-    FallbackLog $statusMessages.convertedRegistry -Force
-
-    # Loading ProxyPlaceholderResolver
-    if (-not ('ProxyPlaceholderResolver' -as [Type])) {
-        Invoke-Expression (Get-Content $RegPsd.ProxyPlaceholderResolver.source -Raw)
-    }
-    $Resolver = [ProxyPlaceholderResolver]::new()
-    & $ProgressBar "Step $currentStep" $statusMessages.loadedResolver (calcPercentages)
-    FallbackLog $statusMessages.loadedResolver -Force
-
+    # Register PsRegistryConfig in Context
+    & $ProgressBar "Step $currentStep" $statusMessages.evaluateRegistry (calcPercentages)
+    $Registry = [scriptblock]::Create($regPsdContent).InvokeReturnAsIs()
     $Context = [pscustomobject]@{}
+    $DiContext = @{
+        Config = @{VolatileDI = $VolatileDI}
+        Registry = $Registry
+    }
+    # $Context | Add-Member -NotePropertyName 'Registry' -NotePropertyValue $Registry
+    FallbackLog $statusMessages.evaluatedRegistry -f
+
+    # Register DependencyInjector and DependencyProvider in Context
+    & $ProgressBar "Step $currentStep" $statusMessages.importDependencyInjector (calcPercentages)
+    Import-Module $Registry.DependencyInjector.source -Force
+    $Context | Add-Member -NotePropertyName 'DependencyInjector' -NotePropertyValue (DependencyInjector $DiContext)
+    $Context | Add-Member -NotePropertyName 'DependencyProvider' -NotePropertyValue (DependencyProvider $Context)
+    $Context | Add-Member -NotePropertyName 'DI' -NotePropertyValue (& $Context.DependencyProvider)
+    & $Context.DI.GetContent 'DependencyInjector' | Out-Null
+    FallbackLog $statusMessages.importedDependencyInjector -f
+
+    # Import ProxyResolver and register in Context
+    & $ProgressBar "Step $currentStep" $statusMessages.importResolver (calcPercentages)
+    & $Context.DI.ImportModule 'ProxyResolver'
+    $Resolver = ProxyResolver $Context
     $Context | Add-Member -NotePropertyName 'Resolver' -NotePropertyValue $Resolver
-    & $ProgressBar "Step $currentStep" $statusMessages.registeredResolver (calcPercentages)
-    FallbackLog $statusMessages.registeredResolver -Force
+    FallbackLog $statusMessages.importedResolver -f
 
-    # Register PlaceholderCallbacks in ProxyPlaceholderResolver
-    $callbacks = & $RegPsd.PlaceholderCallbacks.source
-    $Resolver.RegisterCallbacks($callbacks)
-    & $ProgressBar "Step $currentStep" $statusMessages.loadedCallbacks (calcPercentages)
-    FallbackLog $statusMessages.loadedCallbacks -Force
+    # Register PsCallbacks in ProxyResolver
+    & $ProgressBar "Step $currentStep" $statusMessages.registerResolverCB (calcPercentages)
+    $Resolver.RegisterCallbacks((Invoke-Expression (& $Context.DI.GetContent 'PsCallbacks')))
+    FallbackLog $statusMessages.registeredResolverCB -f
 
-    # Loading RemoteAdminConfig
-    $CfgPsd = Import-PowerShellDataFile $RegPsd.RemoteAdminConfig.source
-    & $ProgressBar "Step $currentStep" $statusMessages.loadedConfig (calcPercentages)
-    FallbackLog $statusMessages.loadedConfig -Force
+    # Import RemoteAdminConfig and register in ProxyResolver 
+    & $ProgressBar "Step $currentStep" $statusMessages.importConfig (calcPercentages)
+    $Resolver.RegisterSource('CONFIG', (Invoke-Expression (& $Context.DI.GetContent 'RemoteAdminConfig')))
+    FallbackLog $statusMessages.importedConfig -f
 
-    # Register RemoteAdminConfig
-    $Resolver.RegisterSource('CONFIG', $CfgPsd)
-    $Config = $Resolver.CreateProxy('CONFIG', $Context, $null)
+    # Register RemoteAdminConfig in Context
+    & $ProgressBar "Step $currentStep" $statusMessages.registerConfig (calcPercentages)
+    $Config = $Resolver.CreateProxy('CONFIG', @('AsHashtable','GetKeys'))
     $Context | Add-Member -NotePropertyName 'Config' -NotePropertyValue $Config
-    & $ProgressBar "Step $currentStep" $statusMessages.registeredConfig (calcPercentages)
-    FallbackLog $statusMessages.registeredConfig -Force
+    FallbackLog $statusMessages.registeredConfig -f
 
-    # Register PsRegistryConfig
-    $Resolver.RegisterSource('REGISTRY', $RegPsd)
-    $Registry = $Resolver.CreateProxy('REGISTRY', $Context, @('AsHashtable'))
+    # Register PsRegistryConfig in ProxyResolver 
+    & $ProgressBar "Step $currentStep" $statusMessages.registerRegistyPR (calcPercentages)
+    $Resolver.RegisterSource('REGISTRY', (Invoke-Expression (& $Context.DI.GetContent 'PsRegistryConfig')))
+    FallbackLog $statusMessages.registeredRegistyPR -f
+
+    # Register PsRegistryConfig in Context
+    & $ProgressBar "Step $currentStep" $statusMessages.registerRegisty (calcPercentages)
+    $Registry = $Resolver.CreateProxy('REGISTRY', @('AsHashtable','Filter','GetKeys','GetRecords'))
     $Context | Add-Member -NotePropertyName 'Registry' -NotePropertyValue $Registry
-    & $ProgressBar "Step $currentStep" $statusMessages.registeredRegisty (calcPercentages)
-    FallbackLog $statusMessages.registeredRegisty -Force
+    FallbackLog $statusMessages.registeredRegisty -f
 
-    # Install all essencial dependencies
-    $dependencies = @(
-        'ProxyPlaceholderResolver',
-        'PlaceholderCallbacks',
-        'PsRegistryConfig',
-        'RemoteAdminConfig',
-        'RemoteAdminData',
-        'ExecuteApiRequest',
-        'MultiDimensionalMenu',
-        'StationSelector',
-        'ParallelRemotingJobs',
-        'CreatePsStartFileLink',
-        'Logger'
-    )
-    $deployments = $Registry.AsHashtable($dependencies)
-    Import-Module $RegPsd.UpdateDeployment.source -Force
-    [object[]]$jobs = CreateJob -Deployments $deployments
-    & $ProgressBar "Step $currentStep" $statusMessages.determiningDependencies (calcPercentages)
-    
-    # UpdateDeployment -Jobs $jobs -EnableDebugLogging:$EnableDebugLogging
-    & $ProgressBar "Step $currentStep" $statusMessages.completedUpdate (calcPercentages)
-    FallbackLog $statusMessages.completedUpdate -Force
+    # Import PsRemoteAdminFramework
+    & $ProgressBar "Step $currentStep" $statusMessages.importApiExecuteable (calcPercentages)
+    & $Context.DI.GetContent 'PsRemoteAdminFramework' | Out-Null
+    FallbackLog $statusMessages.importedApiExecuteable -f
 
-    # Application restart 
+    # Import RemoteAdminRestApi
+    & $ProgressBar "Step $currentStep" $statusMessages.importRestApiExecuteable (calcPercentages)
+    & $Context.DI.GetContent 'RemoteAdminRestApi' | Out-Null
+    FallbackLog $statusMessages.importedRestApiExecuteable -f
+
+    # Import RestApiWrapper
+    & $ProgressBar "Step $currentStep" $statusMessages.importRestApiWrapper (calcPercentages)
+    & $Context.DI.ImportModule 'RestApiWrapper'
+    FallbackLog $statusMessages.importedRestApiWrapper -f
+
+    if (-not $LinkExecuted) {
+        # Import CreatePsStartFileLink
+        & $ProgressBar "Step $currentStep" $statusMessages.createStartFileLinks (calcPercentages)
+        & $Context.DI.ImportModule 'CreatePsStartFileLink'
+        FallbackLog (CreatePsStartFileLink -TargetScript $Registry.PsRemoteAdminFramework.target).Message -f
+        FallbackLog (CreatePsStartFileLink -TargetScript $Registry.PsRemoteAdminFramework.target -PsVersion 7).Message -f
+        FallbackLog (CreatePsStartFileLink -TargetScript $Registry.RemoteAdminRestApi.target).Message -f
+        FallbackLog (CreatePsStartFileLink -TargetScript $Registry.RemoteAdminRestApi.target -PsVersion 7).Message -f
+        FallbackLog $statusMessages.createdStartFileLinks -f
+    }
+
+    # Import ResolveApiRequestPath
+    & $ProgressBar "Step $currentStep" $statusMessages.importApiRequestPathResolver (calcPercentages)
+    & $Context.DI.ImportModule 'ResolveApiRequestPath'
+    FallbackLog $statusMessages.importedApiRequestPathResolver -f
+
+    # Import MultiDimensionalMenu
+    & $ProgressBar "Step $currentStep" $statusMessages.importMultiDimensionalMenu (calcPercentages)
+    & $Context.DI.ImportModule 'MultiDimensionalMenu'
+    FallbackLog $statusMessages.importedMultiDimensionalMenu -f
+
+    # Import ProgressBar
+    & $ProgressBar "Step $currentStep" $statusMessages.importProgressBar (calcPercentages)
+    & $Context.DI.ImportModule 'ProgressBar'
+    FallbackLog $statusMessages.importedProgressBar -f
+
+    # Import CredentialManager
+    & $ProgressBar "Step $currentStep" $statusMessages.importCredentialManager (calcPercentages)
+    & $Context.DI.ImportModule 'CredentialManager'
+    FallbackLog $statusMessages.importedCredentialManager -f
+
+    # Import ParamNormalization
+    & $ProgressBar "Step $currentStep" $statusMessages.importParamNormalizer (calcPercentages)
+    & $Context.DI.ImportModule 'ParamNormalization'
+    FallbackLog $statusMessages.importedParamNormalizer -f
+
+    # Import ComputerActive
+    & $ProgressBar "Step $currentStep" $statusMessages.importComputerActive (calcPercentages)
+    & $Context.DI.ImportModule 'ComputerActive'
+    FallbackLog $statusMessages.importedComputerActive -f
+
+    # Import ParallelRemotingJobs
+    & $ProgressBar "Step $currentStep" $statusMessages.importParallelRemotingJobs (calcPercentages)
+    & $Context.DI.ImportModule 'ParallelRemotingJobs'
+    FallbackLog $statusMessages.importedParallelRemotingJobs -f
+
+    # Import StationSelector
+    & $ProgressBar "Step $currentStep" $statusMessages.importStationSelector (calcPercentages)
+    & $Context.DI.ImportModule 'StationSelector'
+    FallbackLog $statusMessages.importedStationSelector -f
+
+    # Import and register logger
+    & $ProgressBar "Step $currentStep" $statusMessages.importLogger (calcPercentages)
+    & $Context.DI.ImportModule 'Logger'
+    $Logger = Logger @{
+        LogInfo         = $Config.LogProgress
+        LogErrors       = $Config.LogErrors
+        UseConsole      = if ($IsApiMode) { $true } else { $false }
+        # CatchOutputs    = if ($IsApiMode) { $false } else { $true }
+        CatchOutputs    = $false
+    }
+    $Context | Add-Member -NotePropertyName 'Logger' -NotePropertyValue $Logger -Force
+    FallbackLog $statusMessages.importedLogger -f
+
+    # Import RemoteAdminData
+    & $ProgressBar "Step $currentStep" $statusMessages.importRemoteAdminData (calcPercentages)
+    $Node = Invoke-Expression (& $Context.DI.GetContent 'RemoteAdminData')
+    FallbackLog $statusMessages.importedRemoteAdminData -f
+
+    # Application installed / update complete 
     & $ProgressBar $statusMessages.processCompleted "" 101
     Clear-Host
     completeBanner
-    FallbackLog $statusMessages.restarting -Force
-    Start-Sleep -Seconds 3
-    # Start-Process powershell.exe -ArgumentList "-NoExit", "-ExecutionPolicy Bypass",  "-File `"$PSCommandPath`""
-    # exit 1
+    Start-Sleep -Seconds 1
+
+    $Context | Add-Member -NotePropertyName 'Memory' -NotePropertyValue $Memory
+    $Logger.Info("--- 🖥️ $($env:COMPUTERNAME) - Running as: 👤 $(whoami) ---")
+
+    if ($IsApiMode) {
+        ResolveApiRequestPath -Node $Node -Path $InvokeApi.Path -Context $Context
+    } else {
+        MultiDimensionalMenu -Node $Node -Context $Context -MenuName $Config.MenuName -DisplayIndex $Config.DisplayIndex
+    }
 
 } finally {
-    FallbackLog $statusMessages.terminating -Force
-    FallbackLog "-------------------------------------------------------" -Force
+    FallbackLog $statusMessages.terminating -f
+    FallbackLog "-------------------------------------------------------------------------------------" -f
 }

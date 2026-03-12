@@ -22,7 +22,7 @@
         Clear-Host
         Write-Host ("$($MenuName): " + ($Path -join " > ")) -ForegroundColor $Context.Config.Coloring.Path
         Write-Host ""
-        if($Context.Config.OfflineMode -eq $true){
+        if($Context.Config.OfflineMode -eq "True"){
             Write-Host "All repositories are offline." -ForegroundColor Red
             Write-Host ""
         }
@@ -55,7 +55,7 @@
                     Clear-Host
                     Write-Host ("$($MenuName): " + (($Path + $label) -join " > ")) -ForegroundColor $Context.Config.Coloring.Path
                     Write-Host ""
-                    if($Context.Config.OfflineMode -eq $true){
+                    if($Context.Config.OfflineMode -eq "True"){
                         Write-Host "All repositories are offline." -ForegroundColor Red
                         Write-Host ""
                     }

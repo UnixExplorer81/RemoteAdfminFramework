@@ -30,6 +30,7 @@
                 Description = "Exiting the Soundboard"
                 Script = {
                     param($Context)
+                    & $Context.DI.ImportModule 'RemoteDesktopProcess'
                     StopRemoteDesktopProcess -Session $Context.Session -Path $Context.Config.DcsbPath
                 }
                 AffectsProgress = $true
@@ -56,6 +57,7 @@
                 Description = "Exiting Soundboard in order to apply fixes"
                 Script = {
                     param($Context)
+                    & $Context.DI.ImportModule 'RemoteDesktopProcess'
                     StopRemoteDesktopProcess -Session $Context.Session -Path $Context.Config.DcsbPath
                 }
                 AffectsProgress = $true
@@ -64,7 +66,7 @@
                 DisplayName = "Delete current users Soundboard config"
                 Description = "Deleting the current users inconsistent Soundboard config file"
                 Script = {
-                    & $Context.DI.ImportModule 'DcsbFixes'
+                    param($Context)
                     DumpMessedUpUserConfig -Context $Context
                 }
                 WrappedFunction = $true
@@ -93,6 +95,7 @@
                 Description = "Exiting Soundboard in order to apply fixes"
                 Script = {
                     param($Context)
+                    & $Context.DI.ImportModule 'RemoteDesktopProcess'
                     StopRemoteDesktopProcess -Session $Context.Session -Path $Context.Config.DcsbPath
                 }
                 AffectsProgress = $true
@@ -101,6 +104,8 @@
                 DisplayName = "Reset global Soundboard config"
                 Description = "Resetting the global inconsistent Soundboard config file"
                 Script = {
+                    param($Context)
+                    & $Context.DI.ImportModule 'DcsbFixes'
                     ResetGlobalConfig
                 }
                 WrappedFunction = $true
@@ -111,6 +116,7 @@
                 DisplayName = "Delete current users Soundboard config"
                 Description = "Deleting the current users inconsistent Soundboard config file"
                 Script = {
+                    param($Context)
                     DumpMessedUpUserConfig -Context $Context
                 }
                 WrappedFunction = $true
@@ -139,6 +145,7 @@
                 Description = "Exiting Soundboard in order to apply updates"
                 Script = {
                     param($Context)
+                    & $Context.DI.ImportModule 'RemoteDesktopProcess'
                     StopRemoteDesktopProcess -Session $Context.Session -Path $Context.Config.DcsbPath
                 }
                 AffectsProgress = $true
@@ -148,6 +155,7 @@
                 Description = "Running the UpdateDeployment to check for divergences to the server"
                 Script = {
                     param($Context)
+                    & $Context.DI.ImportModule 'DcsbFixes'
                     UpdateSoundsAndPresets -Context $Context
                 }.GetNewClosure()
                 WrappedFunction = $true
@@ -168,6 +176,7 @@
                 DisplayName = "Delete current users Soundboard config"
                 Description = "Deleting the current users inconsistent Soundboard config file"
                 Script = {
+                    param($Context)
                     DumpMessedUpUserConfig -Context $Context
                 }
                 WrappedFunction = $true
@@ -196,6 +205,7 @@
                 Description = "Running the UpdateDeployment to check for divergences to the server"
                 Script = {
                     param($Context)
+                    & $Context.DI.ImportModule 'DcsbFixes'
                     UpdateSoundsAndPresets -Context $Context
                 }.GetNewClosure()
                 WrappedFunction = $true
@@ -215,6 +225,7 @@
                 Description = "Exiting Soundboard in order to apply updates"
                 Script = {
                     param($Context)
+                    & $Context.DI.ImportModule 'RemoteDesktopProcess'
                     StopRemoteDesktopProcess -Session $Context.Session -Path $Context.Config.DcsbPath
                 }
                 AffectsProgress = $true
@@ -224,6 +235,7 @@
                 Description = "Removing all sound and configuration files"
                 Script = {
                     param($Context)
+                    & $Context.DI.ImportModule 'DcsbFixes'
                     RemoveSoundsAndConfig -Context $Context
                 }.GetNewClosure()
                 WrappedFunction = $true
@@ -301,7 +313,8 @@
                 Description = "Launching Soundboard after applying fixes"
                 Script = {
                     param($Context)
-                    ShowNetConfigAssistant -Context $Context
+                    & $Context.DI.ImportModule 'NetConfigAssistant'
+                    NetConfigAssistant -Context $Context
                 }
                 AffectsProgress = $true
             }
@@ -337,6 +350,7 @@
                         mac = Read-Host "MAC address"
                     }
                 }
+                & $Context.DI.ImportModule 'RegisterMacAddress'
                 RegisterMacAddress -Context $Context
             }.GetNewClosure()
         )
@@ -352,6 +366,7 @@
                 Description = "Sending Magic Packet to wake up $($Context.Computer.hostname)"
                 Script = {
                     param($Context)
+                    & $Context.DI.ImportModule 'WakeOnLan'
                     WakeOnLan -Context $Context
                 }
                 AffectsProgress = $true
@@ -490,6 +505,7 @@
                 Description = "Installing/updating modules on remote clients"
                 Script = {
                     param($Context)
+                    & $Context.DI.ImportModule 'RemoteModuleDeployment'
                     RemoteModuleDeployment -Context $Context -Installable $Context.Memory.RemoteModuleDeployment.Installable
                 }.GetNewClosure()
                 AffectsProgress = $true
@@ -527,6 +543,7 @@
                 Description = "Changes password for the specified user on selected stations"
                 Script = {
                     param($Context)
+                    & $Context.DI.ImportModule 'ChangePassword'
                     ChangePassword -Username $Context.Memory.ChangePassword.Username -Password $Context.Memory.ChangePassword.Password
                 }
                 WrappedFunction = $true

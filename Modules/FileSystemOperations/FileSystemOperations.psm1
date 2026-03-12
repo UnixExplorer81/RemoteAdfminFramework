@@ -3,7 +3,7 @@
     param(
         [Parameter(Mandatory)]
         [string]$Path,
-        [string]$MessagePrefix = "FileAndDirectoryOperations->TestFileReadWriteAccess: "
+        [string]$MessagePrefix = "FileSystemOperations->TestFileReadWriteAccess: "
     )
 
     if (-not (Test-Path $Path -PathType Leaf)) {
@@ -44,7 +44,7 @@ function TestDirectoryWriteAccess {
     param(
         [Parameter(Mandatory)]
         [string]$Path,
-        [string]$MessagePrefix = "FileAndDirectoryOperations->TestDirectoryWriteAccess: "
+        [string]$MessagePrefix = "FileSystemOperations->TestDirectoryWriteAccess: "
     )
 
     if (-not (Test-Path $Path -PathType Container)) {
@@ -71,7 +71,7 @@ function TestWriteAccessStrict {
     param(
         [Parameter(Mandatory)]
         [string]$Path,
-        [string]$MessagePrefix = "FileAndDirectoryOperations->TestWriteAccessStrict: "
+        [string]$MessagePrefix = "FileSystemOperations->TestWriteAccessStrict: "
     )
 
     if (Test-Path $Path -PathType Container) {
@@ -107,7 +107,7 @@ function TestWriteAccess {
     param(
         [Parameter(Mandatory)]
         [string]$Path,
-        [string]$MessagePrefix = "FileAndDirectoryOperations->TestWriteAccess: "
+        [string]$MessagePrefix = "FileSystemOperations->TestWriteAccess: "
     )
 
     # Fall 1: Pfad ist bereits ein Verzeichnis → prüfe Schreibrechte darauf
@@ -161,7 +161,7 @@ function EnsureDirectory {
     param(
         [Parameter(Mandatory)]
         [string]$Path,
-        [string]$MessagePrefix = "FileAndDirectoryOperations->EnsureDirectory: "
+        [string]$MessagePrefix = "FileSystemOperations->EnsureDirectory: "
     )
 
     if (Test-Path $Path -PathType Container) {

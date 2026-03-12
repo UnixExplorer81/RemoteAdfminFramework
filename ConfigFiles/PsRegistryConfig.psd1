@@ -25,10 +25,6 @@
 <#
     Configs
 #>
-    TaskSchedulerConfig = @{
-        source = "{{REPOSITORY}}\ConfigFiles\TaskSchedulerConfig.psd1"
-        target = "{{PROGRAMDATABASEDIR}}\PsRemoteAdminFramework\TaskSchedulerConfig.psd1"
-    }
     DomainAccountsApiConfig = @{
         source = "{{REPOSITORY}}\ConfigFiles\DomainAccountsApiConfig.json"
         target = "{{PROGRAMDATABASEDIR}}\PsRemoteAdminFramework\DomainAccountsApiConfig.json"
@@ -37,9 +33,9 @@
         source = "{{REPOSITORY}}\ConfigFiles\InteractiveSync.ps1"
         target = "{{PROGRAMDATABASEDIR}}\PsRemoteAdminFramework\InteractiveSync.ps1"
     }
-    PlaceholderCallbacks = @{
-        source = "{{REPOSITORY}}\ConfigFiles\PlaceholderCallbacks.ps1"
-        target = "{{PROGRAMDATABASEDIR}}\PsRemoteAdminFramework\PlaceholderCallbacks.ps1"
+    PsCallbacks = @{
+        source = "{{REPOSITORY}}\ConfigFiles\PsCallbacks.ps1"
+        target = "{{PROGRAMDATABASEDIR}}\PsRemoteAdminFramework\PsCallbacks.ps1"
     }
     PsRegistryConfig = @{
         source = "{{REPOSITORY}}\ConfigFiles\PsRegistryConfig.psd1"
@@ -52,6 +48,10 @@
     RemoteAdminData = @{
         source = "{{REPOSITORY}}\ConfigFiles\RemoteAdminNodeData.ps1"
         target = "{{PROGRAMDATABASEDIR}}\PsRemoteAdminFramework\NodeData.ps1"
+    }
+    TaskSchedulerConfig = @{
+        source = "{{REPOSITORY}}\ConfigFiles\TaskSchedulerConfig.psd1"
+        target = "{{PROGRAMDATABASEDIR}}\PsRemoteAdminFramework\TaskSchedulerConfig.psd1"
     }
 <#
     Modules
@@ -67,6 +67,10 @@
     ChangePassword = @{
         source = "{{REPOSITORY}}\Modules\ChangePassword\ChangePassword.psm1"
         target = "{{MODULESBASE}}\ChangePassword\ChangePassword.psm1"
+    }
+    ComputerActive = @{
+        source = "{{REPOSITORY}}\Modules\ComputerActive\ComputerActive.psm1"
+        target = "{{MODULESBASE}}\ComputerActive\ComputerActive.psm1"
     }
     ConvertToHashtable = @{
         source = "{{REPOSITORY}}\Modules\ConvertToHashtable\ConvertToHashtable.psm1"
@@ -96,17 +100,13 @@
         source = "{{REPOSITORY}}\Modules\DependencyInjector\DependencyInjector.psm1"
         target = "{{MODULESBASE}}\DependencyInjector\DependencyInjector.psm1"
     }
-    ExecuteApiRequest = @{
-        source = "{{REPOSITORY}}\Modules\ExecuteApiRequest\ExecuteApiRequest.psm1"
-        target = "{{MODULESBASE}}\ExecuteApiRequest\ExecuteApiRequest.psm1"
-    }
     DetectModulesBasePath = @{
         source = "{{REPOSITORY}}\Modules\DetectModulesBasePath\DetectModulesBasePath.psm1"
         target = "{{MODULESBASE}}\DetectModulesBasePath\DetectModulesBasePath.psm1"
     }
-    FileAndDirectoryOperations = @{
-        source = "{{REPOSITORY}}\Modules\FileAndDirectoryOperations\FileAndDirectoryOperations.psm1"
-        target = "{{MODULESBASE}}\FileAndDirectoryOperations\FileAndDirectoryOperations.psm1"
+    FileSystemOperations = @{
+        source = "{{REPOSITORY}}\Modules\FileSystemOperations\FileSystemOperations.psm1"
+        target = "{{MODULESBASE}}\FileSystemOperations\FileSystemOperations.psm1"
     }
     GrantRoamingProfilesAccess = @{
         source = "{{REPOSITORY}}\Modules\GrantRoamingProfilesAccess\GrantRoamingProfilesAccess.psm1"
@@ -141,12 +141,12 @@
         target = "{{MODULESBASE}}\NetUseAuthentification\NetUseAuthentification.psm1"
     }
     ParallelRemotingJobs = @{
-        source = "{{REPOSITORY}}\Modules\ParallelRemoting\ParallelRemotingJobs.psm1"
-        target = "{{MODULESBASE}}\ParallelRemoting\ParallelRemotingJobs.psm1"
+        source = "{{REPOSITORY}}\Modules\ParallelRemotingJobs\ParallelRemotingJobs.psm1"
+        target = "{{MODULESBASE}}\ParallelRemotingJobs\ParallelRemotingJobs.psm1"
     }
     ParallelRemotingRunspaces = @{
-        source = "{{REPOSITORY}}\Modules\ParallelRemoting\ParallelRemotingRunspaces.psm1"
-        target = "{{MODULESBASE}}\ParallelRemoting\ParallelRemotingRunspaces.psm1"
+        source = "{{REPOSITORY}}\Modules\ParallelRemotingRunspaces\ParallelRemotingRunspaces.psm1"
+        target = "{{MODULESBASE}}\ParallelRemotingRunspaces\ParallelRemotingRunspaces.psm1"
     }
     ParamNormalization = @{
         source = "{{REPOSITORY}}\Modules\ParamNormalization\ParamNormalization.psm1"
@@ -159,6 +159,10 @@
     ProgressBar = @{
         source = "{{REPOSITORY}}\Modules\ProgressBar\ProgressBar.psm1"
         target = "{{MODULESBASE}}\ProgressBar\ProgressBar.psm1"
+    }
+    ProxyResolver = @{
+        source = "{{REPOSITORY}}\Modules\ProxyResolver\ProxyResolver.psm1"
+        target = "{{MODULESBASE}}\ProxyResolver\ProxyResolver.psm1"
     }
     ProxyPlaceholderResolver = @{
         source = "{{REPOSITORY}}\Modules\ProxyPlaceholderResolver\ProxyPlaceholderResolver.psm1"
@@ -187,6 +191,10 @@
     RemoveZoneIdentifier = @{
         source = "{{REPOSITORY}}\Modules\RemoveZoneIdentifier\RemoveZoneIdentifier.psm1"
         target = "{{MODULESBASE}}\RemoveZoneIdentifier\RemoveZoneIdentifier.psm1"
+    }
+    ResolveApiRequestPath = @{
+        source = "{{REPOSITORY}}\Modules\ResolveApiRequestPath\ResolveApiRequestPath.psm1"
+        target = "{{MODULESBASE}}\ResolveApiRequestPath\ResolveApiRequestPath.psm1"
     }
     RestApiWrapper = @{
         source = "{{REPOSITORY}}\Modules\RestApiWrapper\RestApiWrapper.psm1"

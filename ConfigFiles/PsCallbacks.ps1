@@ -30,6 +30,14 @@
             return $UserModulePath 
         }
     }
+    OFFLINEMODE = {
+        param($Context)
+        if($Context.Config.BootstrapRoot.Length) {
+            return (-not (Test-Path $Context.Config.BootstrapRoot))
+        }elseif($BootstrapRoot.Length) {
+            return (-not (Test-Path $BootstrapRoot))
+        }
+    }
     PROGRAMDATA = {
         param($Context)
         return $Context.Config.ProgramData
@@ -54,7 +62,7 @@
         $repos = @()
         foreach ($repo in $Context.Config.Repositories) {
             if ($repo -is [string]) {
-                $repos += $Context.Resolver.ResolveStringPlaceholders($repo, $Context)
+                $repos += $Context.Resolver.ResolveStringPlaceholders($repo)
             } else {
                 $repos += $repo
             }
@@ -68,11 +76,9 @@
         param($Context)
         foreach ($server in $Context.Config.Servers) {
             if (Test-Connection -ComputerName $server -Count 1 -Quiet) {
-                $Context.Config.OfflineMode = $false
                 return $server
             }
         }
-        $Context.Config.OfflineMode = $true
     }
     SERVERS = {
         param($key, $Context)

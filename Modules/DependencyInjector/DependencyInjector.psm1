@@ -5,26 +5,26 @@
         [string[]]$Providers = @()
     )
  
-    if(-not $Context.ContainsKey('DI')){
-        $Context.DI = @{}
+    if(-not $Context.ContainsKey('_DiCache')){
+        $Context._DiCache = @{}
     }
-    if(-not $Context.DI.ContainsKey('Modules')){
-        $Context.DI.Modules = @{}
+    if(-not $Context._DiCache.ContainsKey('Modules')){
+        $Context._DiCache.Modules = @{}
     }
-    if(-not $Context.DI.ContainsKey('Providers')){
-        $Context.DI.Providers = @{}
+    if(-not $Context._DiCache.ContainsKey('Providers')){
+        $Context._DiCache.Providers = @{}
     }
 
-    $CodeLoader = CodeLoader -Registry $Context.Registry -Cache $Context.DI.Modules -DevMode:$Context.Config.Verbose
+    $CodeLoader = CodeLoader -Registry $Context.Registry -Cache $Context._DiCache.Modules -Volatile:$Context.Config.VolatileDI
 
     $Modules | ForEach-Object {
-        $Context.DI.Modules[$_] = & $CodeLoader -Key $_
+        $Context._DiCache.Modules[$_] = & $CodeLoader -Key $_
     }
 
     $Providers | ForEach-Object {
         $c = & $CodeLoader -Key $_
         & ([scriptblock]::Create($c))
-        $Context.DI.Providers[$_] = & $_ -Context $Context      
+        $Context._DiCache.Providers[$_] = & $_ -Context $Context      
     }
 
     $DependencyProvider = {
@@ -34,12 +34,12 @@
             GetContent = {
                 param([string]$Key)
                 try {
-                    if (-not $Context.DI.Modules.ContainsKey($Key)) {
-                        $Context.DI.Modules[$Key] = & $CodeLoader -Key $Key
+                    if (-not $Context._DiCache.Modules.ContainsKey($Key)) {
+                        $Context._DiCache.Modules[$Key] = & $CodeLoader -Key $Key
                     }
-                    return $Context.DI.Modules[$Key]
+                    return $Context._DiCache.Modules[$Key]
                 } catch {
-                    throw "DependencyProvider->GetContent: Fatal error while getting code '$Key': $($_.Exception.Message)", $_.Exception
+                    throw "DependencyInjector->GetContent: Fatal error while getting code '$Key': $($_.Exception.Message)", $_.Exception
                 }
             }.GetNewClosure()
 
@@ -49,24 +49,24 @@
                     [object[]]$ArgumentList = @()
                 )
                 try {
-                    if (-not $Context.DI.Modules.ContainsKey($Key)) {
-                        $Context.DI.Modules[$Key] = & $CodeLoader -Key $Key
+                    if (-not $Context._DiCache.Modules.ContainsKey($Key)) {
+                        $Context._DiCache.Modules[$Key] = & $CodeLoader -Key $Key
                     }
-                    $c = $Context.DI.Modules[$Key]
+                    $c = $Context._DiCache.Modules[$Key]
                     if ($c -is [string]) {
                         & ([scriptblock]::Create($c)) $ArgumentList
                     } else {
                         throw "Invalid capability type: $($c.GetType().FullName)"
                     }
                 } catch {
-                    throw "DependencyProvider->ImportModule: Fatal error while importing module '$Key': $($_.Exception.Message)", $_.Exception
+                    throw "DependencyInjector->ImportModule: Fatal error while importing module '$Key': $($_.Exception.Message)", $_.Exception
                 }
             }.GetNewClosure()
 
             GetProvider = {
                 param([string]$Key, $execute = $true)
                 try {
-                    if (-not $Context.DI.Providers.ContainsKey($Key)) {
+                    if (-not $Context._DiCache.Providers.ContainsKey($Key)) {
                         $c = & $CodeLoader -Key $Key
                         & ([scriptblock]::Create($c))
                         $factoryResult = try {
@@ -77,9 +77,9 @@
                         if ($factoryResult -isnot [hashtable]) {
                             throw "Factory function '$Key' doesn't return a hashtable"
                         }
-                        $Context.DI.Providers[$Key] = $factoryResult
+                        $Context._DiCache.Providers[$Key] = $factoryResult
                     }
-                    $p = $Context.DI.Providers[$Key]
+                    $p = $Context._DiCache.Providers[$Key]
                     if ($p -is [hashtable] -and $p.ContainsKey('ScriptBlock') -and $p.ContainsKey('ArgumentList')) {
                         if ($p.ScriptBlock -is [string]) {
                             $p.ScriptBlock = [scriptblock]::Create($p.ScriptBlock)
@@ -95,7 +95,7 @@
                         throw "Invalid provider type: $($p.GetType().FullName)"
                     }
                 } catch {
-                    throw "DependencyProvider->GetProvider: Fatal error while invoking provider '$Key': $($_.Exception.Message)", $_.Exception
+                    throw "DependencyInjector->GetProvider: Fatal error while invoking provider '$Key': $($_.Exception.Message)", $_.Exception
                 }
             }.GetNewClosure()
         }
@@ -125,14 +125,14 @@ function CodeLoader {
         [Parameter(Mandatory)]
         [hashtable]$Registry,
         [hashtable]$Cache = @{},
-        [switch]$DevMode
+        [switch]$Volatile
     )
 
     return {
         param([string]$Key)
 
         if (-not $Registry.ContainsKey($Key)) {
-            throw "DependencyProvider->CodeLoader: Unknown key '$Key'"
+            throw "DependencyInjector->CodeLoader: Unknown key '$Key'"
         }
         if (-not $Cache.ContainsKey($Key)) {
             $sourcePath = $Registry[$Key].source
@@ -140,11 +140,11 @@ function CodeLoader {
             if (-not (Test-Path $sourcePath)) {
                 $path = $localPath
                 if (-not (Test-Path $localPath)) {
-                    throw "DependencyProvider->CodeLoader: All repositories are offline and no local copy exists for '$Key' ($localPath)"
+                    throw "DependencyInjector->CodeLoader: All repositories are offline and no local copy exists for '$Key' ($localPath)"
                 }
             } else {
                 $path = $sourcePath
-                if($DevMode -ne $true){
+                if($Volatile -ne $true){
                     $dest = Split-Path $localPath -Parent
                     if (-not (Test-Path $dest)) {
                         New-Item -Path $dest -ItemType Directory -Force | Out-Null
@@ -158,7 +158,7 @@ function CodeLoader {
             $c = $c -replace '(?mi)^\s*Export-ModuleMember\b.*(?:\r?\n)*', ''
 
             if ($c -match '^\s*$') {
-                throw "DependencyProvider->CodeLoader: File '$path' contains no executable code"
+                throw "DependencyInjector->CodeLoader: File '$path' contains no executable code"
             }
 
             $Cache[$Key] = $c

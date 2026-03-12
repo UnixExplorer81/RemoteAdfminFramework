@@ -5,7 +5,7 @@
         [Parameter(Mandatory)][object]$Context
     )
     
-    $Context.Logger.Info("Non-interactive call: $($Path -join ' > ')")
+    $Context.Logger.Info("API call: $($Path -join ' > ')")
 
     # Resolve node
     $current = $Node

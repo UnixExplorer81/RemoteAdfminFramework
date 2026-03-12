@@ -1,23 +1,10 @@
+# RestApi.ps1
 using module RestApiWrapper
 
-# RemoteAdminApi.ps1
-<#
-    $body = @{
-        Path = @("Soundboard", "Restart (if hotkey recognition fails)", "Specific stations")
-        Memory = @{
-            StationSelector = @{
-                selection = @("AI-086")
-            }
-        }
-    } | ConvertTo-Json -Depth 5 -Compress
+# Defining API listener port number
+$ApiPort = 8080
 
-    Invoke-RestMethod -Uri "http://localhost:8080/api/remote-admin" `
-                    -Method Post `
-                    -Body $body `
-                    -ContentType "application/json"
-#>
-
-# Defining the API endpoint name
+# Defining API endpoint name
 $ApiEndpoint = "remote-admin"
 
 # Defining Api script to wrapp by RestApiWrapper.ps1
@@ -49,4 +36,4 @@ $ApiValidator = {
     }
 }
 
-RestApiWrapper -ApiPath $ApiPath -InputParamName $InputParamName -ApiEndpoint $ApiEndpoint -ApiValidator $ApiValidator -Port 8080
+RestApiWrapper -ApiPath $ApiPath -InputParamName $InputParamName -ApiEndpoint $ApiEndpoint -ApiValidator $ApiValidator -Port $ApiPort

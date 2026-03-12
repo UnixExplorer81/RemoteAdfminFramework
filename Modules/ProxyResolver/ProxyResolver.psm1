@@ -1,85 +1,60 @@
-﻿class ProxyPlaceholderResolver {
-    
-    [hashtable]$Sources
-    [hashtable]$Callbacks
-    [pscustomobject]$Context
+﻿# ProxyResolver.psm1 - functionbased, instance like Implementation
+function ProxyResolver {
+    param([pscustomobject]$Context)
 
-    ProxyPlaceholderResolver($Context) {
-        $this.Sources   = @{}
-        $this.Callbacks = @{}
-        $this.Context = $Context
+    # create resolver object that holds shared state and methods
+    $resolver = [pscustomobject]@{
+        Sources   = @{}
+        Callbacks = @{}
+        Context   = $null
     }
 
-    # Register a source under an id (e.g. 'CONFIG')
-    [void] RegisterSource([string]$id, [hashtable]$source) {
-        $this.Sources[$id] = $source
-    }
+    $resolver.Context = if ($null -ne $Context) { $Context } else { $null }
 
-    # Register a callback scriptblock under an id (e.g. 'REPOSITORY' or 'CREDENTIALKEY')
-    [void] RegisterCallback([string]$id, [scriptblock]$callback) {
-        $this.Callbacks[$id] = $callback
-    }
-    
-    # Convenience: register multiple callbacks from a hashtable
-    [void] RegisterCallbacks([hashtable]$callbacks) {
-        foreach ($id in $callbacks.Keys) {
-            $this.RegisterCallback($id, $callbacks[$id])
-        }
-    }
+    # -------------------------
+    # Helper: CreateProxyRecursive (internal)
+    # Implemented as ScriptMethod so it can use $this (the resolver) and call itself
+    $createProxyRecursive = {
+        param([string]$qualId, [hashtable]$entries, [scriptblock]$callback, [string[]]$AddMethods)
 
-    # Public entry: Create a proxy for a registered source id (alias ToProxy kept for compatibility)
-    [object] CreateProxy([string]$sourceId, $Context, [string[]]$AddMethods) {
-        if (-not $this.Sources.ContainsKey($sourceId)) { throw "Source not registered: $sourceId" }
-        $entries = $this.Sources[$sourceId]
-        $callback = $null
-        if ($this.Callbacks.ContainsKey($sourceId)) { $callback = $this.Callbacks[$sourceId] }
-        return $this.CreateProxyRecursive($sourceId, $entries, $callback, $Context, [string[]]$AddMethods)
-    }
-
-    # Core: build a proxy object from the provided entries hashtable.
-    # This method supports a lookup-fallback: if a composed id (qualId.child) is registered
-    # in $this.Sources, that registration will be used instead of the nested hashtable.
-    [object] CreateProxyRecursive([string]$qualId, [hashtable]$entries, [scriptblock]$callback, $Context, [string[]]$AddMethods) {
-        $self = $this
-        $cb   = $callback
-        $ctx  = $Context
+        # freeze locals for clarity (use $this for resolver state)
+        $resolverThis = $this
 
         $proxy = New-Object PSObject
-        $proxy | Add-Member -NotePropertyName '__proxy_cache' -NotePropertyValue (New-Object System.Collections.Hashtable) -Force
         $proxy | Add-Member -NotePropertyName '__proxy_sourceId' -NotePropertyValue $qualId -Force
+        $proxy | Add-Member -NotePropertyName '__proxy_cache' -NotePropertyValue (New-Object System.Collections.Hashtable) -Force
 
         foreach ($k in $entries.Keys) {
             $val = $entries[$k]
 
-            # --- lazy nested hashtable ---
+            # --- nested hashtable -> lazy nested proxy ---
             if ($val -is [hashtable]) {
-                # freeze iteration-specific locals BEFORE creating the closure
+                # freeze iteration locals
                 $iter_propName      = $k
                 $iter_propVal       = $val
-                $iter_callbackLocal = $cb
-                $iter_ctx           = $ctx
-                $iter_resolver      = $self
+                $iter_callbackLocal = $callback
                 $iter_qualId        = $qualId
                 $iter_composedId    = "$iter_qualId.$iter_propName"
 
                 $nestedGetter = {
                     param()
                     if (-not $this.__proxy_cache) { $this.__proxy_cache = @{} }
-
                     if ($this.__proxy_cache.ContainsKey($iter_propName)) { return $this.__proxy_cache[$iter_propName] }
 
                     # choose registered composed source or fallback to nested hashtable
                     $nestedEntries = $null
                     $nestedCb = $iter_callbackLocal
-                    if ($iter_resolver.Sources.ContainsKey($iter_composedId)) {
-                        $nestedEntries = $iter_resolver.Sources[$iter_composedId]
-                        if ($iter_resolver.Callbacks.ContainsKey($iter_composedId)) { $nestedCb = $iter_resolver.Callbacks[$iter_composedId] }
+                    if ($this.PSObject.Properties.Match('__proxy_sourceId')) { } # noop to keep $this in closure
+
+                    if ($resolverThis.Sources.ContainsKey($iter_composedId)) {
+                        $nestedEntries = $resolverThis.Sources[$iter_composedId]
+                        if ($resolverThis.Callbacks.ContainsKey($iter_composedId)) { $nestedCb = $resolverThis.Callbacks[$iter_composedId] }
                     } else {
                         $nestedEntries = $iter_propVal
                     }
 
-                    # build nested proxy and cache it
-                    $nestedProxy = $iter_resolver.CreateProxyRecursive($iter_composedId, $nestedEntries, $nestedCb, $iter_ctx, $null)
+                    # build nested proxy and cache it (pass live context)
+                    $nestedProxy = $resolverThis._CreateProxyRecursive($iter_composedId, $nestedEntries, $nestedCb, $null)
                     $this.__proxy_cache[$iter_propName] = $nestedProxy
                     return $nestedProxy
                 }.GetNewClosure()
@@ -89,15 +64,66 @@
                 continue
             }
 
-            # --- lazy array handling ---
+            # --- array handling ---
             if ($val -is [System.Collections.IEnumerable] -and -not ($val -is [string])) {
-                # freeze iteration locals
                 $iter_propName      = $k
                 $iter_propVal       = $val
-                $iter_callbackLocal = $cb
-                $iter_ctx           = $ctx
-                $iter_resolver      = $self
+                $iter_callbackLocal = $callback
                 $iter_qualId        = $qualId
+
+                # $arrayGetter = {
+                #     param()
+                #     if (-not $this.__proxy_cache) { $this.__proxy_cache = @{} }
+                #     if ($this.__proxy_cache.ContainsKey($iter_propName)) { return $this.__proxy_cache[$iter_propName] }
+
+                #     # Lokaler, rekursiver Helfer (keine Proxy‑Property, direkte Rekursion)
+                #     $resolveElement = {
+                #         param($element)
+
+                #         # String mit Platzhaltern
+                #         if ($element -is [string]) {
+                #             return $resolverThis.ResolveStringPlaceholders($element, $resolverThis.Context)
+                #         }
+
+                #         # Scriptblock ausführen (mit Context wenn möglich)
+                #         if ($element -is [scriptblock]) {
+                #             try { return & $element $resolverThis.Context } catch { try { return & $element } catch { return $null } }
+                #         }
+
+                #         # Hashtable oder PSCustomObject -> nested proxy erzeugen
+                #         if ($element -is [hashtable] -or $element -is [System.Management.Automation.PSObject]) {
+                #             $elemComposedId = "$iter_qualId.$iter_propName"
+                #             if ($resolverThis.Sources.ContainsKey($elemComposedId)) {
+                #                 $elemEntries = $resolverThis.Sources[$elemComposedId]
+                #                 $elemCb = if ($resolverThis.Callbacks.ContainsKey($elemComposedId)) { $resolverThis.Callbacks[$elemComposedId] } else { $iter_callbackLocal }
+                #                 return $resolverThis._CreateProxyRecursive($elemComposedId, $elemEntries, $elemCb, $null)
+                #             } else {
+                #                 return $resolverThis._CreateProxyRecursive("$iter_qualId.$iter_propName", $element, $iter_callbackLocal, $null)
+                #             }
+                #         }
+
+                #         # Enumerable (mehrdimensionale Arrays) -> rekursiv Elemente auflösen
+                #         if ($element -is [System.Collections.IEnumerable] -and -not ($element -is [string])) {
+                #             $sub = @()
+                #             foreach ($e in $element) {
+                #                 $sub += & $resolveElement $e
+                #             }
+                #             return $sub
+                #         }
+
+                #         # Fallback: unverändert übernehmen
+                #         return $element
+                #     }.GetNewClosure()
+
+                #     $outList = @()
+                #     foreach ($item in $iter_propVal) {
+                #         $outList += & $resolveElement $item
+                #     }
+
+                #     # cache array (store as plain array)
+                #     $this.__proxy_cache[$iter_propName] = $outList
+                #     return $outList
+                # }.GetNewClosure()
 
                 $arrayGetter = {
                     param()
@@ -107,24 +133,21 @@
                     $outList = @()
                     foreach ($item in $iter_propVal) {
                         if ($item -is [string]) {
-                            # resolve placeholders inside string elements
-                            $outList += $iter_resolver.ResolveStringPlaceholders($item, $iter_ctx)
+                            $outList += $resolverThis._ResolveStringPlaceholders($item, $resolverThis.Context)
                         } elseif ($item -is [hashtable]) {
-                            # nested hashtable element -> create nested proxy lazily
                             $elemComposedId = "$iter_qualId.$iter_propName"
-                            if ($iter_resolver.Sources.ContainsKey($elemComposedId)) {
-                                $elemEntries  = $iter_resolver.Sources[$elemComposedId]
-                                $elemCb = if ($iter_resolver.Callbacks.ContainsKey($elemComposedId)) { $iter_resolver.Callbacks[$elemComposedId] } else { $iter_callbackLocal }
-                                $outList += $iter_resolver.CreateProxyRecursive($elemComposedId, $elemEntries, $elemCb, $iter_ctx, $null)
+                            if ($resolverThis.Sources.ContainsKey($elemComposedId)) {
+                                $elemEntries  = $resolverThis.Sources[$elemComposedId]
+                                $elemCb = if ($resolverThis.Callbacks.ContainsKey($elemComposedId)) { $resolverThis.Callbacks[$elemComposedId] } else { $iter_callbackLocal }
+                                $outList += $resolverThis._CreateProxyRecursive($elemComposedId, $elemEntries, $elemCb, $null)
                             } else {
-                                $outList += $iter_resolver.CreateProxyRecursive("$iter_qualId.$iter_propName", $item, $iter_callbackLocal, $iter_ctx, $null)
+                                $outList += $resolverThis._CreateProxyRecursive("$iter_qualId.$iter_propName", $item, $iter_callbackLocal, $null)
                             }
                         } else {
                             $outList += $item
                         }
                     }
 
-                    # cache array (store as single array object)
                     $this.__proxy_cache[$iter_propName] = ,$outList
                     return ,$outList
                 }.GetNewClosure()
@@ -134,95 +157,57 @@
                 continue
             }
 
-            # closure locals for getter
-            $propName = $k
-            $propVal  = $val
-            $callbackLocal = $cb
-            $ctx      = $ctx
-            $resolver = $self
+            # --- scalar / string / scriptblock property ---
+            $propName      = $k
+            $propVal       = $val
+            $callbackLocal = $callback
 
-            # getter closure: lazy resolution + caching + normalization
             $get = {
                 param()
                 if (-not $this.__proxy_cache) { $this.__proxy_cache = @{} }
-
-                if ($this.__proxy_cache.ContainsKey($propName)) {
-                    return $this.__proxy_cache[$propName]
-                }
+                if ($this.__proxy_cache.ContainsKey($propName)) { return $this.__proxy_cache[$propName] }
 
                 $resolved = $null
 
-                # 1) If the literal contains placeholders and resolver available -> resolve
                 if ($propVal -is [string] -and $propVal -match '\{\{[^}]+\}\}') {
-                    try {
-                        if ($resolver) { $resolved = $resolver.ResolveStringPlaceholders($propVal, $ctx) }
-                    } catch { $resolved = $null }
+                    try { $resolved = $resolverThis._ResolveStringPlaceholders($propVal, $resolverThis.Context) } catch { $resolved = $null }
                 }
 
-                # 2) If unresolved, try callback (support several signatures)
-                if (($null -eq $resolved -or $resolved -eq $propVal -or $resolved -eq '') -and $callbackLocal) {
-                    try { $resolved = & $callbackLocal $propName $ctx } catch {}
-                    if (-not $resolved) { try { $resolved = & $callbackLocal $ctx } catch {} }
+                if (($null -eq $resolved -or $resolved -eq $propVal) -and $callbackLocal) {
+                    try { $resolved = & $callbackLocal $propName $resolverThis.Context } catch {}
+                    if (-not $resolved) { try { $resolved = & $callbackLocal $resolverThis.Context } catch {} }
                     if (-not $resolved) { try { $resolved = & $callbackLocal $propName } catch {} }
                     if (-not $resolved) { try { $resolved = & $callbackLocal } catch {} }
                 }
 
-                # 3) fallback to literal value
-                if ($null -eq $resolved -or ($null -eq $resolved) -or ($resolved -eq '')) {
-                    $resolved = $propVal
-                }
+                if ($null -eq $resolved) { $resolved = $propVal }
 
-                # ----------------- Normalizer (preserve native types) -----------------
-                # Execute scriptblocks, preserve booleans/numerics/objects/arrays instead of forcing strings
+                # normalizer
                 $convert = {
                     param($raw)
-
-                    # Execute scriptblock with context if present
                     if ($raw -is [scriptblock]) {
-                        try { $raw = & $raw $ctx } catch { try { $raw = & $raw } catch { $raw = $null } }
+                        try { $raw = & $raw $resolverThis.Context } catch { try { $raw = & $raw } catch { $raw = $null } }
                     }
-
-                    # Preserve already-structured objects and hashtables
-                    if ($raw -is [System.Management.Automation.PSCustomObject] -or $raw -is [hashtable]) {
-                        return $raw
-                    }
-
-                    # Preserve booleans and numeric scalars (do NOT convert them to strings)
-                    if ($raw -is [bool] -or
-                        $raw -is [byte] -or
-                        $raw -is [int16] -or
-                        $raw -is [int] -or
-                        $raw -is [long] -or
-                        $raw -is [single] -or
-                        $raw -is [double] -or
-                        $raw -is [decimal]) {
-                        return $raw
-                    }
-
-                    # Collections: preserve as array, resolve any scriptblocks inside, preserve element types
+                    if ($raw -is [System.Management.Automation.PSCustomObject] -or $raw -is [hashtable]) { return $raw }
+                    if ($raw -is [bool] -or $raw -is [byte] -or $raw -is [int16] -or $raw -is [int] -or $raw -is [long] -or $raw -is [single] -or $raw -is [double] -or $raw -is [decimal]) { return $raw }
                     if ($raw -is [System.Collections.IEnumerable] -and -not ($raw -is [string])) {
                         $out = @()
                         foreach ($el in $raw) {
                             if ($el -is [scriptblock]) {
-                                try { $val = & $el $ctx } catch { try { $val = & $el } catch { $val = $null } }
-                            } else {
-                                $val = $el
-                            }
+                                try { $val = & $el $resolverThis.Context } catch { try { $val = & $el } catch { $val = $null } }
+                            } else { $val = $el }
                             $out += $val
                         }
-                        return ,$out   # return as real array (preserve types)
+                        return ,$out
                     }
-
-                    # Fallback: scalar -> string
                     try { return [string]$raw } catch { return $raw.ToString() }
-                }
+                }.GetNewClosure()
 
-                # attach small normalizer helper to proxy for nested conversions (once)
                 if (-not $this.PSObject.Members.Match('__normalize_element').Count) {
                     $normBlock = {
                         param($element)
                         if ($element -is [scriptblock]) {
-                            try { $element = & $element $ctx } catch { try { $element = & $element } catch { $element = $null } }
+                            try { $element = & $element $resolverThis.Context } catch { try { $element = & $element } catch { $element = $null } }
                         }
                         if ($element -is [System.Management.Automation.PSCustomObject] -or $element -is [hashtable]) { return $element }
                         if ($element -is [System.Collections.IEnumerable] -and -not ($element -is [string])) {
@@ -242,95 +227,81 @@
                 return $final
             }.GetNewClosure()
 
-            # add property as PSScriptProperty on proxy
             $scriptProp = New-Object System.Management.Automation.PSScriptProperty($propName, $get)
             $proxy.PSObject.Properties.Add($scriptProp) | Out-Null
         }
-        $this.AddHelperMethods($proxy, $AddMethods)
+
+        # add helper methods if requested
+        $this._AddHelperMethods($proxy, $AddMethods)
+
         return $proxy
     }
 
-    # String resolver (kept for completeness; proxies use this for nested placeholder resolution)
-    [string] ResolveStringPlaceholders([string]$text, $Context) {
+    # -------------------------
+    # ResolveStringPlaceholders helper (as ScriptMethod)
+    $resolveStringPlaceholders = {
+        param([string]$text)
         if (-not $text) { return $text }
-        $self = $this
 
         function ConvertRecursive {
             param($raw)
             if ($null -eq $raw) { return $null }
-
             if ($raw -is [scriptblock]) {
-                try { $raw = & $raw $Context } catch { try { $raw = & $raw } catch { $raw = $null } }
+                try { $raw = & $raw $this.Context } catch { try { $raw = & $raw } catch { $raw = $null } }
             }
-
             if ($raw -is [System.Management.Automation.PSCustomObject] -or $raw -is [hashtable]) {
                 try { return [string]$raw } catch { return $raw.ToString() }
             }
-
             if ($raw -is [System.Collections.IEnumerable] -and -not ($raw -is [string])) {
                 $elems = @()
                 foreach ($e in $raw) { $elems += (ConvertRecursive $e) }
                 return ($elems -join ",")
             }
-
             try { $s = [string]$raw } catch { $s = $raw.ToString() }
-            if ($s -and ($s -match '\{\{[^}]+\}\}')) {
-                return $self.ResolveStringPlaceholders($s, $Context)
-            }
+            if ($s -and ($s -match '\{\{[^}]+\}\}')) { return $this._ResolveStringPlaceholders($s) }
             return $s
         }
 
         $pattern = '\{\{([^}]+)\}\}'
         $regex = [regex]$pattern
         $matches = $regex.Matches($text)
-
         if ($matches.Count -eq 0) { return $text }
 
         $sb = New-Object System.Text.StringBuilder
         $last = 0
-
         foreach ($m in $matches) {
             $sb.Append($text.Substring($last, $m.Index - $last)) | Out-Null
-
             $inner = $m.Groups[1].Value
             $parts = $inner.Split(":",2)
-
             $replacement = $null
 
             if ($parts.Count -eq 1) {
                 $token = $parts[0]
-
-                if ($self.Callbacks.ContainsKey($token)) {
-                    $cb = $self.Callbacks[$token]
+                if ($this.Callbacks.ContainsKey($token)) {
+                    $cb = $this.Callbacks[$token]
                     $val = $null
-                    try { $val = & $cb $Context } catch {}
+                    try { $val = & $cb $this.Context } catch {}
                     if (-not $val) { try { $val = & $cb } catch {} }
                     $replacement = ConvertRecursive $val
                 }
-
-                if (($null -eq $replacement -or $replacement -eq '') -and $self.Sources.ContainsKey($token)) {
-                    $s = $self.Sources[$token]
-                    if ($s -is [hashtable] -and $s.ContainsKey('Value')) {
-                        $replacement = [string]$s['Value']
-                    } elseif ($s -is [string]) {
-                        $replacement = [string]$s
-                    }
+                if (($null -eq $replacement -or $replacement -eq '') -and $this.Sources.ContainsKey($token)) {
+                    $s = $this.Sources[$token]
+                    if ($s -is [hashtable] -and $s.ContainsKey('Value')) { $replacement = [string]$s['Value'] }
+                    elseif ($s -is [string]) { $replacement = [string]$s }
                 }
             } else {
                 $src = $parts[0]; $key = $parts[1]
-
-                if ($self.Callbacks.ContainsKey($src)) {
-                    $cb = $self.Callbacks[$src]
+                if ($this.Callbacks.ContainsKey($src)) {
+                    $cb = $this.Callbacks[$src]
                     $val = $null
-                    try { $val = & $cb $key $Context } catch {}
-                    if (-not $val) { try { $val = & $cb $Context } catch {} }
+                    try { $val = & $cb $key $this.Context } catch {}
+                    if (-not $val) { try { $val = & $cb $this.Context } catch {} }
                     if (-not $val) { try { $val = & $cb $key } catch {} }
                     if (-not $val) { try { $val = & $cb } catch {} }
                     $replacement = ConvertRecursive $val
                 }
-
-                if (($null -eq $replacement -or $replacement -eq '') -and $self.Sources.ContainsKey($src)) {
-                    $s = $self.Sources[$src]
+                if (($null -eq $replacement -or $replacement -eq '') -and $this.Sources.ContainsKey($src)) {
+                    $s = $this.Sources[$src]
                     if ($s -is [System.Management.Automation.PSObject]) {
                         if ($s.PSObject.Properties.Match($key).Count -gt 0) {
                             try { $v = $s.$key } catch { $v = $null }
@@ -340,7 +311,7 @@
                         if ($s.ContainsKey($key)) {
                             $val = $s[$key]
                             if ($val -is [string] -and ($val -match '\{\{[^}]+\}\}')) {
-                                $replacement = $self.ResolveStringPlaceholders($val, $Context)
+                                $replacement = $this._ResolveStringPlaceholders($val, $this.Context)
                             } else {
                                 $replacement = ConvertRecursive $val
                             }
@@ -349,54 +320,38 @@
                 }
             }
 
-            if ($null -eq $replacement -or $replacement -eq '') {
-                $sb.Append($m.Value) | Out-Null
-            } else {
-                $sb.Append([string]$replacement) | Out-Null
-            }
-
+            if ($null -eq $replacement -or $replacement -eq '') { $sb.Append($m.Value) | Out-Null } else { $sb.Append([string]$replacement) | Out-Null }
             $last = $m.Index + $m.Length
         }
 
-        if ($last -lt $text.Length) {
-            $sb.Append($text.Substring($last)) | Out-Null
-        }
-
+        if ($last -lt $text.Length) { $sb.Append($text.Substring($last)) | Out-Null }
         return $sb.ToString()
     }
 
-    [void] AddHelperMethods([object]$proxy, [string[]]$methods) {
-        # choose default if none specified
-        if (-not $methods -or $methods.Count -eq 0) {
-            return
-        }
+    # -------------------------
+    # AddHelperMethods (as ScriptMethod)
+    $addHelperMethods = {
+        param([object]$proxy, [string[]]$methods)
+        if (-not $methods -or $methods.Count -eq 0) { return }
 
-        # --- GetRecords(keys) -> hashtable { key = value } ---
+        # GetRecords
         if ($methods -contains 'GetRecords' -and -not $proxy.PSObject.Members.Match('GetRecords').Count) {
             $sbGetRecords = {
                 param($keys)
-                # normalize keys -> array
                 if ($null -eq $keys) { $keys = @() }
                 if (-not ($keys -is [System.Collections.IEnumerable]) -or ($keys -is [string])) { $keys = ,$keys }
-                $parent = $this    # $this here is the proxy on which GetRecords was called
+                $parent = $this
                 $out = New-Object PSObject
-                # optional cache for the returned object
                 $out | Add-Member -NotePropertyName '__proxy_cache' -NotePropertyValue (New-Object System.Collections.Hashtable) -Force
                 foreach ($k in $keys) {
                     if (-not $k) { continue }
                     if ($parent.PSObject.Properties.Match($k).Count -eq 0) { continue }
-                    # capture key for closure
                     $propName = $k
-                    # getter for the returned object's property: forward to parent.$propName (lazy)
                     $get = {
                         param()
                         if (-not $this.__proxy_cache) { $this.__proxy_cache = @{} }
                         if ($this.__proxy_cache.ContainsKey($propName)) { return $this.__proxy_cache[$propName] }
-
-                        # IMPORTANT: use $parent (captured) to access original lazy getter
                         $val = $parent.$propName
-
-                        # cache the resolved value inside returned object
                         $this.__proxy_cache[$propName] = $val
                         return $val
                     }.GetNewClosure()
@@ -409,7 +364,7 @@
             $proxy.PSObject.Members.Add($m) | Out-Null
         }
 
-        # --- Filter(predicate) -> PSObject snapshot where predicate($key,$value) is true ---
+        # Filter
         if ($methods -contains 'Filter' -and -not $proxy.PSObject.Members.Match('Filter').Count) {
             $sbFilter = {
                 param($predicate)
@@ -417,7 +372,6 @@
                 $keysToInclude = @()
                 foreach ($p in $parent.PSObject.Properties) {
                     if ($p.Name -like '__*') { continue }
-                    # try predicate; for value-based predicates we must resolve the parent value here
                     $val = $null
                     try { $val = $parent.$($p.Name) } catch { $val = $null }
                     $ok = $false
@@ -429,7 +383,6 @@
                     } catch { $ok = $false }
                     if ($ok) { $keysToInclude += $p.Name }
                 }
-                # build a new proxy forwarding to parent for the chosen keys (lazy getters)
                 $out = New-Object PSObject
                 $out | Add-Member -NotePropertyName '__proxy_cache' -NotePropertyValue (New-Object System.Collections.Hashtable) -Force
                 foreach ($k in $keysToInclude) {
@@ -451,29 +404,21 @@
             $proxy.PSObject.Members.Add($m) | Out-Null
         }
 
-        # --- AsHashtable([keys]) -> eager PSCustomObject, placeholders resolved (robust) ---
+        # AsHashtable
         if ($methods -contains 'AsHashtable' -and -not $proxy.PSObject.Members.Match('AsHashtable').Count) {
             $sbAsHashtable = {
                 param($keys)
                 if ($null -eq $keys) { $keys = @() }
                 if (-not ($keys -is [System.Collections.IEnumerable]) -or ($keys -is [string])) { $keys = ,$keys }
-
                 $parent = $this
                 $result = @{}
-
                 $props = $parent.PSObject.Properties | Where-Object { $_.Name -notlike '__*' } | Select-Object -ExpandProperty Name
                 if ($keys.Count -gt 0) { $props = $props | Where-Object { $keys -contains $_ } }
-
                 foreach ($p in $props) {
                     $value = $null
                     try { $value = $parent.$p } catch { $value = $null }
-
-                    # --- 1. Echte Proxy-Objekte (mit __proxy_sourceId) → rekursiv AsHashtable ---
-                    if ($value -is [System.Management.Automation.PSObject] -and 
-                        $value.PSObject.Properties.Match('__proxy_sourceId').Count -gt 0) {
-                        try { 
-                            $value = $value.AsHashtable() 
-                        } catch { 
+                    if ($value -is [System.Management.Automation.PSObject] -and $value.PSObject.Properties.Match('__proxy_sourceId').Count -gt 0) {
+                        try { $value = $value.AsHashtable() } catch {
                             $plain = @{}
                             foreach ($sub in $value.PSObject.Properties) {
                                 if ($sub.Name -like '__*') { continue }
@@ -481,23 +426,15 @@
                             }
                             $value = $plain
                         }
-                    }
-                    # --- 2. Arrays: nur Proxy-Elemente rekursiv, plain Elemente unverändert ---
-                    elseif ($value -is [System.Collections.IEnumerable] -and -not ($value -is [string])) {
+                    } elseif ($value -is [System.Collections.IEnumerable] -and -not ($value -is [string])) {
                         $arr = @()
                         foreach ($el in $value) {
-                            # Nur wenn Element ein echter Proxy ist → AsHashtable()
-                            if ($el -is [System.Management.Automation.PSObject] -and 
-                                $el.PSObject.Properties.Match('__proxy_sourceId').Count -gt 0) {
+                            if ($el -is [System.Management.Automation.PSObject] -and $el.PSObject.Properties.Match('__proxy_sourceId').Count -gt 0) {
                                 $arr += $el.AsHashtable()
-                            } else {
-                                # Plain-Werte (String, Zahl, bool) direkt übernehmen
-                                $arr += $el
-                            }
+                            } else { $arr += $el }
                         }
                         $value = $arr
                     }
-
                     $result[$p] = $value
                 }
                 return $result
@@ -506,7 +443,7 @@
             $proxy.PSObject.Members.Add($m) | Out-Null
         }
 
-        # --- GetKeys() -> string[] of keys (excludes meta names) ---
+        # GetKeys
         if ($methods -contains 'GetKeys' -and -not $proxy.PSObject.Members.Match('GetKeys').Count) {
             $sbKeys = {
                 param()
@@ -516,34 +453,119 @@
             $proxy.PSObject.Members.Add($m) | Out-Null
         }
     }
-    
-    [hashtable] ResolveProxyObjects([string[]]$Resolve) {
-        $jobCtx = @{}
+
+    # -------------------------
+    # ProxyCacheReset helper (recursive)
+    $proxyCacheReset = {
+        if ($null -eq $this.Context) { return }
         foreach ($prop in $this.Context.PSObject.Properties) {
-            $name = $prop.Name
-            if ($name -like '__*') { continue }
-            # try real evaluation (will run ScriptProperty getters)
+            if ($prop.Name -like '__*') { continue }
             $val = $null
-            try { $val = $this.Context.$name } catch { $val = $prop.Value }
-            # If property is explicitly in Resolve and it is a proxy-like object,
-            # prefer calling AsHashtable if available.
-            if ($Resolve -contains $name -and $null -ne $val) {
-                if ($val -is [System.Management.Automation.PSObject]) {
-                    # check for script methods (AsHashtable)
-                    if ($null -ne $val.PSObject.Members['AsHashtable']) {
-                        try {
-                            # ensure plain is recursively converted into pure PS hashtables/arrays
-                            $jobCtx[$name] = $val.AsHashtable()
-                            continue
-                        } catch {
-                            # fall through to general conversion
-                        }
+            try { $val = $this.Context.$($prop.Name) } catch { $val = $prop.Value }
+            if ($val -is [System.Management.Automation.PSObject] -and $val.PSObject.Properties.Match('__proxy_cache').Count -gt 0) {
+                try { $val.__proxy_cache.Clear() } catch {}
+                $this._ProxyCacheReset($val)
+                continue
+            }
+            if ($val -is [System.Collections.IEnumerable] -and -not ($val -is [string])) {
+                foreach ($el in $val) {
+                    if ($el -is [System.Management.Automation.PSObject]) {
+                        try { $el.__proxy_cache.Clear() } catch {}
+                        $this._ProxyCacheReset($el)
                     }
                 }
             }
-            # Fallback: convert whatever we have to plain
-            $jobCtx[$name] = $val
         }
-        return $jobCtx
     }
+
+    # -------------------------
+    # Attach internal helpers as ScriptMethods on resolver
+    $resolver | Add-Member -MemberType ScriptMethod -Name _CreateProxyRecursive -Value $createProxyRecursive
+    $resolver | Add-Member -MemberType ScriptMethod -Name _ResolveStringPlaceholders -Value $resolveStringPlaceholders
+    $resolver | Add-Member -MemberType ScriptMethod -Name _AddHelperMethods -Value $addHelperMethods
+    $resolver | Add-Member -MemberType ScriptMethod -Name _ProxyCacheReset -Value $proxyCacheReset
+
+    # -------------------------
+    # Public methods
+
+    # Initialize / set Context
+    $setContext = {
+        param($Context)
+        $this.Context = $Context
+    }
+    $resolver | Add-Member -MemberType ScriptMethod -Name SetContext -Value $setContext
+
+    # RegisterSource
+    $regSource = {
+        param([string]$ID, [hashtable]$Source)
+        $this.Sources[$ID] = $Source
+    }
+    $resolver | Add-Member -MemberType ScriptMethod -Name RegisterSource -Value $regSource
+
+    # RegisterCallback
+    $regCallback = {
+        param([string]$ID, [scriptblock]$callback)
+        $this.Callbacks[$ID] = $callback
+    }
+    $resolver | Add-Member -MemberType ScriptMethod -Name RegisterCallback -Value $regCallback
+
+    # RegisterCallbacks (bulk)
+    $regCallbacks = {
+        param([hashtable]$callbacks)
+        foreach ($ID in $callbacks.Keys) {
+            $this.RegisterCallback($ID, $callbacks[$ID])
+        }
+    }
+    $resolver | Add-Member -MemberType ScriptMethod -Name RegisterCallbacks -Value $regCallbacks
+
+    # CreateProxy (public)
+    $createProxy = {
+        param([string]$ID, [string[]]$AddMethods)
+        if (-not $this.Sources.ContainsKey($ID)) { throw "Source not registered: $ID" }
+        $entries = $this.Sources[$ID]
+        $callback = $null
+        if ($this.Callbacks.ContainsKey($ID)) { $callback = $this.Callbacks[$ID] }
+        return $this._CreateProxyRecursive($ID, $entries, $callback, $AddMethods)
+    }
+    $resolver | Add-Member -MemberType ScriptMethod -Name CreateProxy -Value $createProxy
+
+    # ResolveStringPlaceholders (public wrapper)
+    $resolveStringPlaceholdersPublic = {
+        param([string]$Text)
+        return $this._ResolveStringPlaceholders($Text)
+    }
+    $resolver | Add-Member -MemberType ScriptMethod -Name ResolveStringPlaceholders -Value $resolveStringPlaceholdersPublic
+
+    # ResolveProxyObjects (helper to convert proxies to plain hashtables)
+    $resolveProxyObjects = {
+        param([string[]]$Resolve)
+        $resolvedCtx = @{}
+        foreach ($prop in $this.Context.PSObject.Properties) {
+            $name = $prop.Name
+            if ($name -like '__*') { continue }
+            $val = $null
+            try { $val = $this.Context.$name } catch { $val = $prop.Value }
+            if ($Resolve -contains $name -and $null -ne $val) {
+                if ($val -is [System.Management.Automation.PSObject]) {
+                    if ($null -ne $val.PSObject.Members['AsHashtable']) {
+                        try { $resolvedCtx[$name] = $val.AsHashtable(); continue } catch {}
+                    }
+                }
+            }
+            $resolvedCtx[$name] = $val
+        }
+        return $resolvedCtx
+    }
+    $resolver | Add-Member -MemberType ScriptMethod -Name ResolveProxyObjects -Value $resolveProxyObjects
+
+    # ProxyCacheReset public wrapper
+    $proxyCacheResetPublic = {
+        $this._ProxyCacheReset()
+    }
+    $resolver | Add-Member -MemberType ScriptMethod -Name ProxyCacheReset -Value $proxyCacheResetPublic
+
+    return $resolver
 }
+
+# Export the factory
+Export-ModuleMember -Function ProxyResolver

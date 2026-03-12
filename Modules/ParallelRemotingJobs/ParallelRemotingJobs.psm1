@@ -1,5 +1,4 @@
-﻿using module ProxyPlaceholderResolver
-using module ParamNormalization
+﻿using module ParamNormalization
 using module ComputerActive
 
 function ParallelRemotingJobs {
@@ -12,7 +11,7 @@ function ParallelRemotingJobs {
     )
 
     $runningJobs = [System.Collections.ArrayList]::new()
-    $jobContext = ResolveProxyObjects -Context $Context -Resolve @('Config','Registry')
+    $jobContext = $Context.Resolver.ResolveProxyObjects(@('Config','Registry'))
 
     foreach ($Client in $Clients) {
         $runningJobs.Add((Start-Job -ArgumentList $Client, $Credential, $jobContext -ScriptBlock {
@@ -40,9 +39,9 @@ function ParallelRemotingJobs {
                         } elseif (-not $task.RemoteExecution) {
                             & $params.ScriptBlock $params.ArgumentList[0]
                         } else {
-                            $result = @{
+                            @{
                                 Success = $false
-                                Message = "ParallelRemotingJobs: RemoteExecution active but $session could not be established" 
+                                Message = "ParallelRemotingJobs: Session required, but could not be established" 
                             }
                         }
 
@@ -66,7 +65,14 @@ function ParallelRemotingJobs {
                             DisplayName = $task.DisplayName
                             Description = $task.Description
                             AffectsProgress = $task.AffectsProgress
-                            Result = $_
+                            Result = @{
+                                Message = $_.Exception.Message
+                                Function= $_.InvocationInfo.MyCommand.Name
+                                Script  = $_.InvocationInfo.ScriptName
+                                Line    = $_.InvocationInfo.ScriptLineNumber
+                                Stack   = $_.ScriptStackTrace
+                            }
+
                         })
                     }
                 }

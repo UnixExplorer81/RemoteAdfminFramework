@@ -8,6 +8,7 @@
 
     $Context.DependencyInjector = DependencyInjector $Context
     $Context.DependencyProvider = DependencyProvider $Context
+    $Context.DI = & $Context.DependencyProvider
 
     # Default: Context + Runtime
     $argumentList = @(
